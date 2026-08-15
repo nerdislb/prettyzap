@@ -1,0 +1,19 @@
+{
+  "name": "prettyzap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A secure desktop foundation around WhatsApp Web.",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "npm run build && concurrently -k \"tsc -p tsconfig.main.json --watch\" \"electron .\"",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit",
+    "build": "npm run typecheck && tsc -p tsconfig.main.json",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.2",
+    "electron": "^34.0.0",
+    "typescript": "^5.7.2"
+  }
+}

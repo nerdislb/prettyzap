@@ -1,0 +1,30 @@
+/**
+ * Anchors observed in the authenticated WhatsApp Web shell.
+ * Keep WhatsApp-specific DOM knowledge inside this feature.
+ */
+export const whatsappDrawerSelectors = {
+  applicationRoot: '[data-testid="wa-web-main-screen"]',
+  navigationRail: 'header[data-testid="chatlist-header"]',
+  chatListHeader: 'header[data-testid="chatlist-header"]',
+  chatListShell: '[data-testid="drawer-left"]',
+  chatListColumn: '#side',
+  chatListSearch: 'input[placeholder="Search or start a new chat"]',
+  // WhatsApp renders its two lists differently. The standard list is a grid,
+  // while Archived is a separate list with a stable container marker.
+  chatListRows: '[role="row"][data-testid^="list-item-"] > [role="gridcell"]',
+  archivedChatList: '[data-testid="archived-chatlist"]',
+  archivedChatListRows:
+    '[data-testid="archived-chatlist"] [role="listitem"][data-testid^="list-item-"]',
+  conversationMessages: '[data-testid="conversation-panel-messages"]',
+  messageComposer: '[data-testid="conversation-compose-box-input"]',
+  navigationButtons: {
+    chats: 'button[aria-label="Chats"]',
+    calls: 'button[aria-label="Calls"]',
+    status: 'button[aria-label="Status"]',
+    channels: 'button[aria-label="Channels"]',
+    communities: 'button[aria-label="Communities"]',
+    metaAi: 'button[aria-label="Meta AI"]',
+    media: 'button[aria-label="Media"]',
+    you: 'button[aria-label="You"]',
+  },
+} as const;
