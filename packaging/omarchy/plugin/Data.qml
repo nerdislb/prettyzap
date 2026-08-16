@@ -27,6 +27,7 @@ Item {
   property bool ready: false
   property int revision: 0
   property var pendingActions: []
+  property int checkedPid: 0
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string statusPath:
@@ -47,10 +48,17 @@ Item {
     printErrors: false
     onFileChanged: reload()
     onLoaded: root.parseStatus(text())
-    onLoadFailed: {
-      root.theme = ""
-      root.pid = 0
-    }
+    onLoadFailed: root.resetStatus()
+  }
+
+  function resetStatus() {
+    root.theme = ""
+    root.pid = 0
+    root.appVisible = false
+    root.ready = false
+    root.revision = 0
+    root.running = false
+    root.checkedPid = 0
   }
 
   function parseStatus(content) {
@@ -60,24 +68,18 @@ Item {
         var t = String(parsed.theme || "")
         root.theme = (t === "whatsapp" || t === "system") ? t : ""
         var p = parseInt(parsed.pid, 10)
-        root.pid = isFinite(p) && p > 0 ? p : 0
+        var nextPid = isFinite(p) && p > 0 ? p : 0
+        if (root.pid !== nextPid) root.running = false
+        root.pid = nextPid
         root.appVisible = parsed.visible === true
         root.ready = parsed.ready === true
         var r = parseInt(parsed.revision, 10)
         root.revision = isFinite(r) && r >= 0 ? r : 0
       } else {
-        root.theme = ""
-        root.pid = 0
-        root.appVisible = false
-        root.ready = false
-        root.revision = 0
+        root.resetStatus()
       }
     } catch (e) {
-      root.theme = ""
-      root.pid = 0
-      root.appVisible = false
-      root.ready = false
-      root.revision = 0
+      root.resetStatus()
     }
   }
 
@@ -87,20 +89,24 @@ Item {
     id: liveness
     running: false
     command: ["sh", "-c", "kill -0 " + root.pid + " 2>/dev/null"]
-    // The exit code arrives as a signal parameter, not a property.
-    onExited: (code) => root.running = code === 0
+    onExited: (code) => {
+      if (root.pid !== root.checkedPid) return
+      if (code === 0) root.running = true
+      else root.resetStatus()
+    }
   }
 
   function checkRunning() {
     if (root.pid <= 0) {
-      root.running = false
+      root.resetStatus()
       return
     }
+    root.checkedPid = root.pid
     liveness.running = true
   }
 
   Timer {
-    interval: 15000
+    interval: 3000
     running: true
     repeat: true
     triggeredOnStart: true
@@ -139,18 +145,6 @@ Item {
     onExited: (code) => root.finishAction(code === 0)
   }
 
-  Process {
-    id: launcher
-    running: false
-    command: []
-
-    onExited: root.finishAction(true)
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("prettyletto.prettyzap", text.trim())
-    }
-  }
-
   function fallbackArgs(action) {
     if (action === "launch") return root.launchArgs
     if (action === "show") return root.launchArgs.concat(["--show"])
@@ -183,11 +177,15 @@ Item {
   }
 
   function pump() {
-    if (dbusProc.running || launcher.running || root.pendingActions.length === 0) return
+    if (dbusProc.running || root.pendingActions.length === 0) return
     var action = root.pendingActions[0]
+    console.info("prettyzap action", action, "pid", root.pid)
     if (action === "launch" || root.pid <= 0) {
-      launcher.command = root.fallbackArgs(action)
-      launcher.running = true
+      // App launches must not occupy a Process for PrettyZap's entire
+      // lifetime. Detached execution lets later Show/Hide/Theme/Quit actions
+      // continue through the same serialized queue immediately.
+      Quickshell.execDetached(root.fallbackArgs(action))
+      root.finishAction(true)
     } else {
       dbusProc.command = root.dbusArgs(action)
       dbusProc.running = true
@@ -198,15 +196,15 @@ Item {
     var action = root.pendingActions.length > 0 ? root.pendingActions[0] : "launch"
     root.pendingActions = root.pendingActions.slice(1)
     if (!dbusSucceeded && action !== "launch") {
-      launcher.command = root.fallbackArgs(action)
-      launcher.running = true
-      return
+      Quickshell.execDetached(root.fallbackArgs(action))
     }
     pump()
   }
 
   function launch() { enqueue("launch") }                      // open / focus
+  function show() { enqueue("show") }                           // open / focus
   function toggle() { enqueue("toggle") }                       // hide or show
+  function requestToggle() { toggle() }                           // authoritative app-side toggle
   function hide() { enqueue("hide") }
   function openSettings() { enqueue("settings") }
   function quit() { enqueue("quit") }

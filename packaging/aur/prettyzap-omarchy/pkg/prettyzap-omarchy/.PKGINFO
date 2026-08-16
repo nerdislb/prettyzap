@@ -4,12 +4,12 @@ pkgname = prettyzap-omarchy
 pkgbase = prettyzap-omarchy
 xdata = pkgtype=pkg
 pkgver = 0.1.0-1
-pkgdesc = Omarchy/Quickshell integration for PrettyZap: bar widget, standalone widget, and menu entry
+pkgdesc = Native Omarchy Quattro bar integration for PrettyZap with optional standalone fallback
 url = https://github.com/prettyletto/prettyzap
-builddate = 1786866394
+builddate = 1786889864
 packager = Unknown Packager
-size = 39893
+size = 43056
 arch = any
 license = MIT
 depend = prettyzap-bin
-optdepend = quickshell-git: runtime for the standalone widget when not on Omarchy
+optdepend = quickshell-git: runtime for the explicit standalone fallback outside Omarchy

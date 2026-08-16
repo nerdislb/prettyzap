@@ -4,12 +4,14 @@
   "private": true,
   "description": "A secure desktop foundation around WhatsApp Web.",
   "author": "PrettyZap",
+  "license": "MIT",
   "desktopName": "prettyzap",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "npm run build && concurrently -k \"tsc -p tsconfig.main.json --watch\" \"electron .\"",
     "typecheck": "tsc -p tsconfig.main.json --noEmit",
     "build": "npm run typecheck && tsc -p tsconfig.main.json",
+    "test": "npm run build && node --test dist/main/window-state.test.js",
     "start": "electron .",
     "package:linux": "npm run build && electron-builder --linux"
   },
@@ -36,5 +38,8 @@
     "electron": "^34.0.0",
     "electron-builder": "^26.0.12",
     "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "dbus-next": "^0.10.2"
   }
 }

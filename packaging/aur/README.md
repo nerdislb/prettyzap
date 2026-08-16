@@ -12,10 +12,11 @@ AppImage, extracts it at package-build time so runtime FUSE support is not
 required, and installs a normal launcher, desktop entry, and icon.
 
 `prettyzap-omarchy` depends on `prettyzap-bin` and installs the Omarchy/
-Quickshell integration: the `prettyletto.prettyzap` bar widget, the standalone
-Quickshell widget, the optional menu snippet, and the `prettyzap-omarchy-setup`
-installer (which wraps `packaging/omarchy/install.sh`). It never edits a user's
-Omarchy configuration — the user runs `prettyzap-omarchy-setup` to opt in.
+Quattro integration: the `prettyletto.prettyzap` bar widget, an explicit
+standalone fallback for non-Omarchy Quickshell users, the optional menu
+snippet, and the `prettyzap-omarchy-setup` installer (which wraps
+`packaging/omarchy/install.sh`). It never edits a user's Omarchy
+configuration — the user runs `prettyzap-omarchy-setup` to opt in.
 
 ## Syncing the integration files
 
@@ -38,12 +39,14 @@ Before pushing either directory to the AUR:
 
 1. Build the exact AppImage release and update its SHA-256 in the core PKGBUILD
    and `.SRCINFO`.
-2. Re-sync the `prettyzap-omarchy` integration files from `packaging/omarchy/`
+2. Run `packaging/omarchy/check-sync.sh`, then re-sync the
+   `prettyzap-omarchy` integration files from `packaging/omarchy/`
    and refresh its PKGBUILD checksums + `.SRCINFO`.
 3. Run `makepkg --printsrcinfo > .SRCINFO` in each package directory.
 4. Run `makepkg -Cfs` in a clean Arch build environment.
 5. Install the resulting package in a clean user account and verify launch,
-   desktop-menu discovery, persistent WhatsApp authentication, tray behavior,
+   desktop-menu discovery, persistent WhatsApp authentication, Omarchy bar
+   behavior, and tray fallback behavior,
    `prettyzap-omarchy-setup --plugin` and `--standalone`, and uninstall
    cleanliness.
 

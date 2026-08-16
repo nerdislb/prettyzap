@@ -8,6 +8,19 @@ export interface ShellState {
   maximized: boolean;
   drawerCollapsed: boolean;
   whatsappTheme: "whatsapp" | "system";
+  shortcuts: ShortcutPreferences;
+}
+
+export interface ShortcutPreferences {
+  toggleDrawer: string;
+  search: string;
+  openArchived: string;
+  scrollDown: string;
+  scrollUp: string;
+  focusComposer: string;
+  cycleForward: string;
+  cycleBackward: string;
+  navigation: Record<"1" | "2" | "3" | "4" | "5" | "6" | "7" | "8", string>;
 }
 
 export const DEFAULT_SHELL_STATE: ShellState = {
@@ -16,7 +29,37 @@ export const DEFAULT_SHELL_STATE: ShellState = {
   maximized: false,
   drawerCollapsed: true,
   whatsappTheme: "whatsapp",
+  shortcuts: {
+    toggleDrawer: "Ctrl+L",
+    search: "Ctrl+/",
+    openArchived: "Ctrl+Shift+A",
+    scrollDown: "Ctrl+J",
+    scrollUp: "Ctrl+K",
+    focusComposer: "Ctrl+I",
+    cycleForward: "Ctrl+Shift+J",
+    cycleBackward: "Ctrl+Shift+K",
+    navigation: {
+      "1": "Ctrl+1",
+      "2": "Ctrl+2",
+      "3": "Ctrl+3",
+      "4": "Ctrl+4",
+      "5": "Ctrl+5",
+      "6": "Ctrl+6",
+      "7": "Ctrl+7",
+      "8": "Ctrl+8",
+    },
+  },
 };
+
+function defaultShellState(): ShellState {
+  return {
+    ...DEFAULT_SHELL_STATE,
+    shortcuts: {
+      ...DEFAULT_SHELL_STATE.shortcuts,
+      navigation: { ...DEFAULT_SHELL_STATE.shortcuts.navigation },
+    },
+  };
+}
 
 const MIN_WIDTH = 720;
 const MIN_HEIGHT = 520;
@@ -32,10 +75,10 @@ function validDimension(value: unknown, minimum: number): value is number {
 }
 
 export function normalizeShellState(value: unknown): ShellState {
-  if (!value || typeof value !== "object") return { ...DEFAULT_SHELL_STATE };
+  if (!value || typeof value !== "object") return defaultShellState();
   const candidate = value as Partial<ShellState>;
   if (!validDimension(candidate.width, MIN_WIDTH) || !validDimension(candidate.height, MIN_HEIGHT)) {
-    return { ...DEFAULT_SHELL_STATE };
+    return defaultShellState();
   }
   return {
     width: candidate.width,
@@ -43,6 +86,37 @@ export function normalizeShellState(value: unknown): ShellState {
     maximized: candidate.maximized === true,
     drawerCollapsed: candidate.drawerCollapsed !== false,
     whatsappTheme: candidate.whatsappTheme === "system" ? "system" : "whatsapp",
+    shortcuts: normalizeShortcutPreferences(candidate.shortcuts),
+  };
+}
+
+export function normalizeShortcutPreferences(value: unknown): ShortcutPreferences {
+  const candidate = value && typeof value === "object" ? value as Partial<ShortcutPreferences> : {};
+  const defaults = DEFAULT_SHELL_STATE.shortcuts;
+  const valid = (key: Exclude<keyof ShortcutPreferences, "navigation">): string =>
+    typeof candidate[key] === "string" && candidate[key].trim().length > 0
+      ? candidate[key].trim()
+      : defaults[key];
+
+  return {
+    toggleDrawer: valid("toggleDrawer"),
+    search: valid("search"),
+    openArchived: valid("openArchived"),
+    scrollDown: valid("scrollDown"),
+    scrollUp: valid("scrollUp"),
+    focusComposer: valid("focusComposer"),
+    cycleForward: valid("cycleForward"),
+    cycleBackward: valid("cycleBackward"),
+    navigation: {
+      "1": typeof candidate.navigation?.["1"] === "string" && candidate.navigation["1"].trim() ? candidate.navigation["1"].trim() : defaults.navigation["1"],
+      "2": typeof candidate.navigation?.["2"] === "string" && candidate.navigation["2"].trim() ? candidate.navigation["2"].trim() : defaults.navigation["2"],
+      "3": typeof candidate.navigation?.["3"] === "string" && candidate.navigation["3"].trim() ? candidate.navigation["3"].trim() : defaults.navigation["3"],
+      "4": typeof candidate.navigation?.["4"] === "string" && candidate.navigation["4"].trim() ? candidate.navigation["4"].trim() : defaults.navigation["4"],
+      "5": typeof candidate.navigation?.["5"] === "string" && candidate.navigation["5"].trim() ? candidate.navigation["5"].trim() : defaults.navigation["5"],
+      "6": typeof candidate.navigation?.["6"] === "string" && candidate.navigation["6"].trim() ? candidate.navigation["6"].trim() : defaults.navigation["6"],
+      "7": typeof candidate.navigation?.["7"] === "string" && candidate.navigation["7"].trim() ? candidate.navigation["7"].trim() : defaults.navigation["7"],
+      "8": typeof candidate.navigation?.["8"] === "string" && candidate.navigation["8"].trim() ? candidate.navigation["8"].trim() : defaults.navigation["8"],
+    },
   };
 }
 
@@ -53,7 +127,7 @@ export function loadShellState(): ShellState {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       console.warn("Unable to load PrettyZap shell state", error);
     }
-    return { ...DEFAULT_SHELL_STATE };
+    return defaultShellState();
   }
 }
 

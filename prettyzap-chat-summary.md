@@ -111,7 +111,7 @@ The Electron main process handles shortcuts through `before-input-event`:
 - `Ctrl/Cmd + Enter`: focus the active conversation composer
 - `Ctrl/Cmd + Shift + J`: cycle forward through chats
 - `Ctrl/Cmd + Shift + K`: cycle backward through chats
-- `Ctrl/Cmd + A`: open WhatsApp’s native Archived view
+- `Ctrl/Cmd + Shift + A`: open WhatsApp’s native Archived view
 - `Ctrl/Cmd + Shift + T`: toggle the persisted WhatsApp/System cosmetic theme
 
 The chat-cycle drawer remains visible while shortcuts are repeated and hides after a short idle period when PrettyZap opened it automatically.
@@ -142,8 +142,11 @@ o.bind("SUPER + SHIFT + G", "PrettyZap", { launch = "prettyzap --toggle" })
 This lets Hyprland users choose their own binding without asking Electron to
 compete with compositor shortcuts. Normal Arch desktop users can use the
 Electron shortcut where supported or connect `prettyzap --toggle` to their
-desktop launcher. PrettyZap does not add compositor-specific workarounds or a
-settings system for rebinding.
+desktop launcher. On Omarchy Quattro, the bar plugin is the primary control
+surface, the Electron tray is disabled by default, and existing instances are
+controlled over the session D-Bus service `org.prettyzap.Desktop`.
+PrettyZap does not add compositor-specific workarounds or a settings system
+for rebinding.
 
 ## Archived indexing bug and fix
 
@@ -180,7 +183,7 @@ The fix:
 
 Live verification:
 
-1. `Ctrl+A` opens Archived.
+1. `Ctrl+Shift+A` opens Archived.
 2. First `Ctrl+Shift+J` selects **O melhor jogo de todos**, the actual first archived row.
 3. Next `Ctrl+Shift+J` selects **Laryssa Rebouças**.
 4. `Ctrl+Shift+K` returns to **O melhor jogo de todos**.
@@ -215,6 +218,7 @@ The following commands pass:
 ```
 npm run typecheck
 npm run build
+packaging/omarchy/check-sync.sh
 ```
 
 The application has also been launched directly with:

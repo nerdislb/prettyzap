@@ -24,6 +24,7 @@ Item {
   property bool installed: true
   property string theme: "" // "whatsapp" | "system" | "" while unknown
   property int pid: 0
+  property int checkedPid: 0
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string statusPath:
@@ -44,10 +45,14 @@ Item {
     printErrors: false
     onFileChanged: reload()
     onLoaded: root.parseStatus(text())
-    onLoadFailed: {
-      root.theme = ""
-      root.pid = 0
-    }
+    onLoadFailed: root.resetStatus()
+  }
+
+  function resetStatus() {
+    root.theme = ""
+    root.pid = 0
+    root.running = false
+    root.checkedPid = 0
   }
 
   function parseStatus(content) {
@@ -57,14 +62,14 @@ Item {
         var t = String(parsed.theme || "")
         root.theme = (t === "whatsapp" || t === "system") ? t : ""
         var p = parseInt(parsed.pid, 10)
-        root.pid = isFinite(p) && p > 0 ? p : 0
+        var nextPid = isFinite(p) && p > 0 ? p : 0
+        if (root.pid !== nextPid) root.running = false
+        root.pid = nextPid
       } else {
-        root.theme = ""
-        root.pid = 0
+        root.resetStatus()
       }
     } catch (e) {
-      root.theme = ""
-      root.pid = 0
+      root.resetStatus()
     }
   }
 
@@ -75,15 +80,19 @@ Item {
     id: liveness
     running: false
     command: ["sh", "-c", "kill -0 " + root.pid + " 2>/dev/null"]
-    // The exit code arrives as a signal parameter, not a property.
-    onExited: (code) => root.running = code === 0
+    onExited: (code) => {
+      if (root.pid !== root.checkedPid) return
+      if (code === 0) root.running = true
+      else root.resetStatus()
+    }
   }
 
   function checkRunning() {
     if (root.pid <= 0) {
-      root.running = false
+      root.resetStatus()
       return
     }
+    root.checkedPid = root.pid
     liveness.running = true
   }
 

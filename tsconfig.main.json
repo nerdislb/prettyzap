@@ -8,5 +8,5 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/main/index.ts", "src/preload/**/*.ts", "src/features/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/features/**/*.ts"]
 }

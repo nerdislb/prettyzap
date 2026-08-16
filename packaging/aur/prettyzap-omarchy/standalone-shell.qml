@@ -111,8 +111,7 @@ ShellRoot {
           } else if (mouse.button === Qt.MiddleButton) {
             data.openSettings()
           } else if (mouse.button === Qt.LeftButton) {
-            if (data.running) data.toggle()
-            else data.launch()
+            data.toggle()
           }
         }
       }

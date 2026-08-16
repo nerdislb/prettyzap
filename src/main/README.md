@@ -5,9 +5,10 @@ state, and WhatsApp drawer collapsed/expanded state) in the XDG config file
 `$XDG_CONFIG_HOME/prettyzap/shell-state.json`, falling back to
 `$HOME/.config/prettyzap/shell-state.json`.
 
-When Electron can register a native tray item, closing the window hides it and
-the tray menu can show, restart, or quit PrettyZap. Tray support on Linux is
-provided by the desktop's status-notifier host. Some Wayland compositors do
-not provide a compatible host, so the tray may be unavailable there; in that
-case PrettyZap keeps normal close-to-quit behavior and does not leave the app
-hidden in the background.
+On Omarchy/Quattro, the bar plugin is the primary control surface and the
+Electron tray is disabled by default. The window and WhatsApp Web contents stay
+alive while hidden, and the plugin controls the existing instance over the
+session D-Bus service `org.prettyzap.Desktop`. Closing the window hides it.
+
+On other Linux desktops, the native tray remains available. Use
+`PRETTYZAP_FORCE_TRAY=1` or `PRETTYZAP_DISABLE_TRAY=1` to override detection.

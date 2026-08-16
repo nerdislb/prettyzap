@@ -25,6 +25,7 @@ source=('LICENSE'
         'plugin-Widget.qml'
         'plugin-Data.qml'
         'plugin-README.md'
+        'plugin-prettyzap-widget.png'
         'plugin-prettyzap.svg'
         'standalone-shell.qml'
         'standalone-Data.qml'
@@ -34,10 +35,11 @@ sha256sums=('e1353e4dde193ae18c47ba11139aad7e907f4609ae23e866d206e1d01e9f37b3'
             '931d68b164e4eed25457cf3ac7bed08510500c44fababf7d6f3318af16201a93'
             '8ddb13fcb770ef1546e9c9cc6f1a3e4e8627adb765a533c31488e4b1d9864219'
             '58f76ee81f8a6ad879db4dc293435faa3b87445a49c4bcf4bb6021913d4438b9'
-            '3027fb7f3d89308945e66f93a41f928acf929087b11b1bfa096d60d7ae0dbc05'
-            'd915276803acd80eaa72ddc0c699725d805536ea2c0577a6f830f1ac3d465c61'
-            '392684fac83bcf0971412198d74d75a5087c190938f108923a0caec4d4623d77'
-            '00288b4524eee79bc7758a397d399ca0e63fd051e3db6e9b724e16ab04091759'
+            '42146126160f55c5cd737eec4592c3419f846552554a64d2389322a2e6a5223e'
+            'b3711b5cd28ac4bdd7bf8c7143cb8803bf8dc7f97addaaa5fcb8a1c047c59861'
+            'dae73fe2dcc35b43ca49d8628dd63fca4d3a29de7346922b2a312d811a2ead6b'
+            '397f0dec907e574e741df79afaa3f96faf185091f06d342841f25f90253c4404'
+            'cac6ab3033ca84247a0da8776dc75aed34345b60311fc54039c99306c390168a'
             'dc32d09b142dec2ace99bafae3f9e374e863c70d64e529ad815ac6ba51eb605a'
             '9f09d1b510a785d8b275b8a52c06e0e9c6cbca8bf7aa9c43bf97323a0dc4ad51'
             'bb9946e4f3a8d7e2f4f521ad66a0a341a37b9ddc8e31a3992c4a130379ae3c9d'
@@ -61,6 +63,7 @@ package() {
   install -Dm0644 "${srcdir}/plugin-Widget.qml" "${pdir}/Widget.qml"
   install -Dm0644 "${srcdir}/plugin-Data.qml" "${pdir}/Data.qml"
   install -Dm0644 "${srcdir}/plugin-README.md" "${pdir}/README.md"
+  install -Dm0644 "${srcdir}/plugin-prettyzap-widget.png" "${pdir}/assets/prettyzap-widget.png"
   install -Dm0644 "${srcdir}/plugin-prettyzap.svg" "${pdir}/assets/prettyzap.svg"
 
   # Standalone Quickshell widget

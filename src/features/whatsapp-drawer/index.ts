@@ -2,6 +2,7 @@ import type { WebContents } from "electron";
 import { focusActiveComposer, recoverFocusAfterEscape } from "../whatsapp-focus";
 import { waitForWhatsAppShell } from "../whatsapp-readiness";
 import { whatsappDrawerSelectors } from "./selectors";
+import type { ShortcutPreferences } from "../../main/shell-state";
 
 const TOGGLE_ID = "prettyzap-whatsapp-drawer-toggle";
 const DRAWER_STATE_EVENT = "prettyzap-drawer-state";
@@ -19,6 +20,27 @@ const NAVIGATION_SHORTCUTS = {
   "7": "media",
   "8": "you",
 } as const;
+
+function matchesShortcut(input: Electron.Input, shortcut: string): boolean {
+  if (input.type !== "keyDown") return false;
+  const parts = shortcut.toLowerCase().split("+").map((part) => part.trim()).filter(Boolean);
+  const key = parts.pop();
+  if (!key) return false;
+  const hasModifier = (name: string): boolean => parts.includes(name);
+  const usesCommand = input.control || input.meta;
+
+  if (hasModifier("ctrl") || hasModifier("cmd")) {
+    if (!usesCommand) return false;
+  } else if (usesCommand) {
+    return false;
+  }
+  if (input.alt !== hasModifier("alt") || input.shift !== hasModifier("shift")) return false;
+  if (key === "enter") return input.key === "Enter";
+  if (key === "space") return input.key === " " || input.key === "Spacebar";
+  if (key === "/") return input.key === "/" || input.code === "Slash";
+  if (/^\d$/.test(key)) return input.key === key || input.code === `Digit${key}`;
+  return input.key.toLowerCase() === key;
+}
 
 const toggleDrawerScript = `(() => {
   const button = document.getElementById(${JSON.stringify(TOGGLE_ID)});
@@ -430,6 +452,7 @@ function createDrawerScript(initialCollapsed: boolean): string {
 export function installWhatsAppDrawer(
   webContents: WebContents,
   initialCollapsed = true,
+  shortcuts: ShortcutPreferences,
 ): () => void {
   let cycleHideTimer: ReturnType<typeof setTimeout> | undefined;
   let escapeFocusRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -466,56 +489,18 @@ export function installWhatsAppDrawer(
       return;
     }
 
-    const isToggleShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      !input.alt &&
-      !input.shift &&
-      input.key.toLowerCase() === "l";
-    const isSearchShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      !input.alt &&
-      (input.code === "Slash" || input.key === "/");
-    const isScrollDownShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      !input.alt &&
-      !input.shift &&
-      input.key.toLowerCase() === "j";
-    const isScrollUpShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      !input.alt &&
-      !input.shift &&
-      input.key.toLowerCase() === "k";
-    const isFocusComposerShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      !input.alt &&
-      !input.shift &&
-      (input.key.toLowerCase() === "i" || input.key === "Enter");
-    const isOpenArchivedShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      !input.alt &&
-      !input.shift &&
-      input.key.toLowerCase() === "a";
-    const isCycleChatsForwardShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      input.shift &&
-      !input.alt &&
-      input.key.toLowerCase() === "j";
-    const isCycleChatsBackwardShortcut =
-      input.type === "keyDown" &&
-      (input.control || input.meta) &&
-      input.shift &&
-      !input.alt &&
-      input.key.toLowerCase() === "k";
-    const navigationKey =
-      input.code?.match(/^Digit([1-8])$/)?.[1] ??
-      (input.key in NAVIGATION_SHORTCUTS ? input.key : undefined);
+    const isToggleShortcut = matchesShortcut(input, shortcuts.toggleDrawer);
+    const isSearchShortcut = matchesShortcut(input, shortcuts.search);
+    const isScrollDownShortcut = matchesShortcut(input, shortcuts.scrollDown);
+    const isScrollUpShortcut = matchesShortcut(input, shortcuts.scrollUp);
+    const isFocusComposerShortcut = matchesShortcut(input, shortcuts.focusComposer) ||
+      (input.type === "keyDown" && (input.control || input.meta) && !input.alt && !input.shift && input.key === "Enter");
+    const isOpenArchivedShortcut = matchesShortcut(input, shortcuts.openArchived);
+    const isCycleChatsForwardShortcut = matchesShortcut(input, shortcuts.cycleForward);
+    const isCycleChatsBackwardShortcut = matchesShortcut(input, shortcuts.cycleBackward);
+    const navigationKey = Object.entries(shortcuts.navigation).find(([, shortcut]) =>
+      matchesShortcut(input, shortcut),
+    )?.[0];
     const navigationScript = navigationKey ? navigationScripts[navigationKey] : undefined;
 
     if (

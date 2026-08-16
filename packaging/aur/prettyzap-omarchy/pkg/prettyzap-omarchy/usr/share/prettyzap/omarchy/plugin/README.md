@@ -1,13 +1,15 @@
 # PrettyZap — Omarchy bar widget
 
-A native Quickshell side widget for [PrettyZap](https://github.com/prettyletto/prettyzap),
+A native Quickshell bar widget for [PrettyZap](https://github.com/prettyletto/prettyzap),
 the keyboard-first WhatsApp Web desktop shell. One bar icon opens/hides the
 app, and a popup panel offers Open / Hide, Settings, and the WhatsApp/System
 theme toggle.
 
 The widget is **purely additive**: enabling it adds a single entry to one bar
 section. Nothing else in `~/.config/omarchy/shell.json` is touched, and the
-widget never edits user configuration on its own.
+widget never edits user configuration on its own. It is the only PrettyZap
+control surface intended for Omarchy Quattro; do not start the standalone
+widget there.
 
 ## What it shows
 
@@ -17,17 +19,16 @@ widget never edits user configuration on its own.
 - **Left-click** — open PrettyZap, or hide it if it is already visible.
 - **Middle-click** — open the PrettyZap settings window.
 - **Right-click** — open the popup panel.
-- **Panel** — branding header, live status line (running + current theme),
-  Open / Hide, Settings, and Theme buttons.
+- **Panel** — branding header, live status line, Open / Hide, Settings, Theme,
+  and Quit buttons.
 
 ## How it works
 
-- `Data.qml` watches `~/.config/prettyzap/status.json` (written by the app on
-  startup and on every theme change; removed on quit) for the theme and pid,
-  and verifies the pid is alive with `kill -0`.
-- Actions are fire-and-forget driver flags the app already understands:
-  `prettyzap --settings`, `prettyzap --theme <whatsapp|system|toggle>`,
-  `--show`, `--hide`, `--toggle`.
+- `Data.qml` watches the atomic `~/.config/prettyzap/status.json` for theme,
+  pid, visibility, readiness, and revision. A slow pid check is retained only
+  for crash recovery.
+- Existing instances receive actions through the session D-Bus service
+  `org.prettyzap.Desktop`; CLI flags are used when D-Bus is unavailable.
 
 ## Settings
 

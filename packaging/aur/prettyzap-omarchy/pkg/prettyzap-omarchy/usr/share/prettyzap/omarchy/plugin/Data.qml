@@ -23,6 +23,11 @@ Item {
   property bool installed: true
   property string theme: "" // "whatsapp" | "system" | "" while unknown
   property int pid: 0
+  property bool appVisible: false
+  property bool ready: false
+  property int revision: 0
+  property var pendingActions: []
+  property int checkedPid: 0
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string statusPath:
@@ -43,10 +48,17 @@ Item {
     printErrors: false
     onFileChanged: reload()
     onLoaded: root.parseStatus(text())
-    onLoadFailed: {
-      root.theme = ""
-      root.pid = 0
-    }
+    onLoadFailed: root.resetStatus()
+  }
+
+  function resetStatus() {
+    root.theme = ""
+    root.pid = 0
+    root.appVisible = false
+    root.ready = false
+    root.revision = 0
+    root.running = false
+    root.checkedPid = 0
   }
 
   function parseStatus(content) {
@@ -56,33 +68,40 @@ Item {
         var t = String(parsed.theme || "")
         root.theme = (t === "whatsapp" || t === "system") ? t : ""
         var p = parseInt(parsed.pid, 10)
-        root.pid = isFinite(p) && p > 0 ? p : 0
+        var nextPid = isFinite(p) && p > 0 ? p : 0
+        if (root.pid !== nextPid) root.running = false
+        root.pid = nextPid
+        root.appVisible = parsed.visible === true
+        root.ready = parsed.ready === true
+        var r = parseInt(parsed.revision, 10)
+        root.revision = isFinite(r) && r >= 0 ? r : 0
       } else {
-        root.theme = ""
-        root.pid = 0
+        root.resetStatus()
       }
     } catch (e) {
-      root.theme = ""
-      root.pid = 0
+      root.resetStatus()
     }
   }
 
-  // Authoritative running check: the status file's pid is alive. `kill -0`
-  // avoids matching other processes by name (the standalone widget's own
-  // quickshell path also contains "prettyzap").
+  // Crash recovery check. Normal state comes from the atomic status file;
+  // this runs infrequently so a crashed process cannot leave a stale icon.
   Process {
     id: liveness
     running: false
     command: ["sh", "-c", "kill -0 " + root.pid + " 2>/dev/null"]
-    // The exit code arrives as a signal parameter, not a property.
-    onExited: (code) => root.running = code === 0
+    onExited: (code) => {
+      if (root.pid !== root.checkedPid) return
+      if (code === 0) root.running = true
+      else root.resetStatus()
+    }
   }
 
   function checkRunning() {
     if (root.pid <= 0) {
-      root.running = false
+      root.resetStatus()
       return
     }
+    root.checkedPid = root.pid
     liveness.running = true
   }
 
@@ -115,33 +134,83 @@ Item {
 
   function checkInstalled() { whichProc.running = true }
 
-  // One-shot launcher for the fire-and-forget driver flags.
+  readonly property string busName: "org.prettyzap.Desktop"
+  readonly property string objectPath: "/org/prettyzap/Desktop"
+  readonly property string interfaceName: "org.prettyzap.Desktop"
+
   Process {
-    id: launcher
+    id: dbusProc
     running: false
     command: []
+    onExited: (code) => root.finishAction(code === 0)
+  }
 
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("prettyletto.prettyzap", text.trim())
+  function fallbackArgs(action) {
+    if (action === "launch") return root.launchArgs
+    if (action === "show") return root.launchArgs.concat(["--show"])
+    if (action === "hide") return root.launchArgs.concat(["--hide"])
+    if (action === "toggle") return root.launchArgs.concat(["--toggle"])
+    if (action === "settings") return root.launchArgs.concat(["--settings"])
+    if (action === "quit") return root.launchArgs.concat(["--quit"])
+    if (action === "theme") return root.launchArgs.concat(["--theme=toggle"])
+    return root.launchArgs
+  }
+
+  function dbusArgs(action) {
+    var method = action === "launch" ? "Show"
+      : action === "show" ? "Show"
+      : action === "hide" ? "Hide"
+      : action === "toggle" ? "Toggle"
+      : action === "settings" ? "OpenSettings"
+      : action === "quit" ? "Quit"
+      : action === "theme" ? "ToggleTheme" : "Show"
+    var command = ["gdbus", "call", "--session", "--dest", root.busName,
+      "--object-path", root.objectPath, "--method", root.interfaceName + "." + method]
+    if (action === "set-whatsapp" || action === "set-system")
+      command.push(action === "set-system" ? "system" : "whatsapp")
+    return command
+  }
+
+  function enqueue(action) {
+    root.pendingActions = root.pendingActions.concat([action])
+    pump()
+  }
+
+  function pump() {
+    if (dbusProc.running || root.pendingActions.length === 0) return
+    var action = root.pendingActions[0]
+    console.info("prettyzap action", action, "pid", root.pid)
+    if (action === "launch" || root.pid <= 0) {
+      // App launches must not occupy a Process for PrettyZap's entire
+      // lifetime. Detached execution lets later Show/Hide/Theme/Quit actions
+      // continue through the same serialized queue immediately.
+      Quickshell.execDetached(root.fallbackArgs(action))
+      root.finishAction(true)
+    } else {
+      dbusProc.command = root.dbusArgs(action)
+      dbusProc.running = true
     }
   }
 
-  function run(args) {
-    if (!launcher.running) {
-      launcher.command = args
-      launcher.running = true
+  function finishAction(dbusSucceeded) {
+    var action = root.pendingActions.length > 0 ? root.pendingActions[0] : "launch"
+    root.pendingActions = root.pendingActions.slice(1)
+    if (!dbusSucceeded && action !== "launch") {
+      Quickshell.execDetached(root.fallbackArgs(action))
     }
+    pump()
   }
 
-  function launch() { run(root.launchArgs) }                      // open / focus
-  function toggle() { run(root.launchArgs.concat(["--toggle"])) } // hide or show
-  function hide() { run(root.launchArgs.concat(["--hide"])) }
-  function openSettings() { run(root.launchArgs.concat(["--settings"])) }
-  function setTheme(mode) { run(root.launchArgs.concat(["--theme=" + String(mode)])) }
+  function launch() { enqueue("launch") }                      // open / focus
+  function show() { enqueue("show") }                           // open / focus
+  function toggle() { enqueue("toggle") }                       // hide or show
+  function requestToggle() { toggle() }                           // authoritative app-side toggle
+  function hide() { enqueue("hide") }
+  function openSettings() { enqueue("settings") }
+  function quit() { enqueue("quit") }
+  function setTheme(mode) { enqueue(mode === "system" ? "set-system" : "set-whatsapp") }
   function toggleTheme() {
-    if (root.theme === "system") setTheme("whatsapp")
-    else setTheme("system")
+    enqueue("theme")
   }
 
   Component.onCompleted: {

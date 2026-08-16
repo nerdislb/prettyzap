@@ -30,6 +30,7 @@ import {
   type PrettyZapTheme,
 } from "./status";
 import { startDesktopControl, type DesktopControl } from "./desktop-control";
+import { isWindowPresented, resolveToggleAction } from "./window-state";
 
 app.setName("PrettyZap");
 
@@ -166,7 +167,7 @@ function publishStatus(): AppStatus {
   const mode = whatsappThemeController?.getMode() ?? shellState.whatsappTheme;
   const status = writeStatus(
     mode,
-    Boolean(prettyZapWindow && !prettyZapWindow.isDestroyed() && prettyZapWindow.isVisible()),
+    isWindowPresented(prettyZapWindow),
     appReady,
   );
   desktopControl?.publish(status);
@@ -310,7 +311,7 @@ function togglePrettyZapWindow(): void {
     return;
   }
 
-  if (window.isVisible()) {
+  if (isWindowPresented(window)) {
     window.hide();
     publishStatus();
     return;
@@ -323,7 +324,7 @@ function togglePrettyZapWindow(): void {
 
 function hidePrettyZapWindow(): void {
   const window = prettyZapWindow;
-  if (window && !window.isDestroyed() && window.isVisible()) {
+  if (window && !window.isDestroyed()) {
     window.hide();
     publishStatus();
   }
@@ -333,7 +334,7 @@ function hidePrettyZapWindow(): void {
 // theme and settings run first so they work even when the window action that
 // follows (re)shows the app; hide beats toggle/show; an explicit toggle wins
 // over show; settings/theme without a window flag imply "show the app".
-function applyCliAction(action: CliAction): void {
+function applyCliAction(action: CliAction, existingInstance = true): void {
   if (action.quit) {
     quitPrettyZap();
     return;
@@ -351,7 +352,7 @@ function applyCliAction(action: CliAction): void {
 
   if (action.settings) {
     const window = prettyZapWindow;
-    if (window && !window.isDestroyed() && !window.isVisible()) {
+    if (window && !window.isDestroyed() && !isWindowPresented(window)) {
       restoreAndFocusPrettyZapWindow();
     }
     openSettings();
@@ -360,7 +361,9 @@ function applyCliAction(action: CliAction): void {
   if (action.hide) {
     hidePrettyZapWindow();
   } else if (action.toggle) {
-    togglePrettyZapWindow();
+    const toggleAction = resolveToggleAction(existingInstance);
+    if (toggleAction === "show") restoreAndFocusPrettyZapWindow();
+    else togglePrettyZapWindow();
   } else if (action.show) {
     restoreAndFocusPrettyZapWindow();
   } else if (action.settings || action.theme) {
@@ -579,6 +582,10 @@ function createWindow(): void {
   });
   window.on("maximize", () => updateWindowState(window));
   window.on("unmaximize", () => updateWindowState(window));
+  window.on("show", () => publishStatus());
+  window.on("hide", () => publishStatus());
+  window.on("minimize", () => publishStatus());
+  window.on("restore", () => publishStatus());
   window.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
@@ -643,7 +650,7 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, commandLine) => {
-    applyCliAction(parseCliArgs(commandLine));
+    applyCliAction(parseCliArgs(commandLine), true);
   });
 
   app.whenReady().then(() => {
@@ -676,7 +683,7 @@ if (!hasSingleInstanceLock) {
 
     // Driver flags passed to the first instance (e.g. `prettyzap --settings`
     // or `prettyzap --theme system` when nothing is running yet).
-    applyCliAction(parseCliArgs(process.argv.slice(1)));
+    applyCliAction(parseCliArgs(process.argv.slice(1)), false);
 
     const registered = globalShortcut.register(SHOW_HIDE_ACCELERATOR, () => {
       togglePrettyZapWindow();
