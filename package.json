@@ -28,7 +28,9 @@
     },
     "asar": true,
     "files": [
-      "dist/**/*",
+      "dist/main/**/*",
+      "dist/preload/**/*",
+      "dist/features/**/*",
       "package.json"
     ]
   },
