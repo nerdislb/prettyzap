@@ -233,10 +233,16 @@ function createSystemThemeCss(palette: OmarchyPalette): string {
       --panel-background-deeper: ${roles.appBackground} !important;
       --compose-input-background: ${roles.inputBackground} !important;
       --compose-input-border: ${roles.border} !important;
+      --panel-input-background: ${roles.inputBackground} !important;
       --conversation-header-border: ${roles.border} !important;
       --conversation-panel-border: ${roles.border} !important;
       --dropdown-background: ${roles.elevatedBackground} !important;
       --intro-background: ${roles.panelBackground} !important;
+      --reactions-panel-background-color: ${roles.elevatedBackground} !important;
+      --reactions-tray-background: ${roles.elevatedBackground} !important;
+      --reactions-details-background: ${roles.elevatedBackground} !important;
+      --sticker-button-background: ${roles.elevatedBackground} !important;
+      --svg-gray-button: ${roles.elevatedBackground} !important;
       --WDS-background-wash-inset: ${roles.panelBackground} !important;
       --WDS-background-wash-plain: ${roles.appBackground} !important;
       --WDS-background-elevated-wash-inset: ${roles.elevatedBackground} !important;
@@ -318,7 +324,14 @@ function createSystemThemeCss(palette: OmarchyPalette): string {
       color: var(--prettyzap-muted-text) !important;
     }
 
-    ${root} [data-testid="addon-bubble-container"],
+    ${root} [data-testid="addon-bubble-container"] {
+      /* Reactions are mounted in this wrapper. Keep the wrapper transparent;
+         painting it as an elevated panel creates a rectangular halo around a
+         standalone emoji while WhatsApp's inner reaction chip is rendering. */
+      background-color: transparent !important;
+      border-color: transparent !important;
+    }
+
     ${root} [data-testid="link-preview-container"] {
       background-color: var(--prettyzap-elevated-background) !important;
       color: var(--prettyzap-primary-text) !important;
