@@ -112,8 +112,38 @@ The Electron main process handles shortcuts through `before-input-event`:
 - `Ctrl/Cmd + Shift + J`: cycle forward through chats
 - `Ctrl/Cmd + Shift + K`: cycle backward through chats
 - `Ctrl/Cmd + A`: open WhatsApp’s native Archived view
+- `Ctrl/Cmd + Shift + T`: toggle the persisted WhatsApp/System cosmetic theme
 
 The chat-cycle drawer remains visible while shortcuts are repeated and hides after a short idle period when PrettyZap opened it automatically.
+
+The theme shortcut and the native `View` menu toggle between WhatsApp Web’s
+native appearance and the active Omarchy System palette. The theme stylesheet
+is installed once per WhatsApp document; normal toggles only change a root
+marker, so WhatsApp is not reloaded and message/composer geometry is unchanged.
+
+PrettyZap also attempts to register the optional global `Ctrl/Cmd + Shift + Space`
+shortcut. It hides the PrettyZap window when visible, and otherwise restores and
+focuses it before best-effort focusing WhatsApp's native composer. If the
+operating system rejects the registration, the app continues without this
+shortcut. Global shortcut support can be limited in Wayland sessions, so the
+same behavior is available through the single-instance command-line toggle:
+
+```bash
+prettyzap --toggle
+```
+
+On Omarchy/Hyprland, add the binding to `~/.config/hypr/bindings.lua` so the
+compositor owns the key and launches that command directly:
+
+```lua
+o.bind("SUPER + SHIFT + G", "PrettyZap", { launch = "prettyzap --toggle" })
+```
+
+This lets Hyprland users choose their own binding without asking Electron to
+compete with compositor shortcuts. Normal Arch desktop users can use the
+Electron shortcut where supported or connect `prettyzap --toggle` to their
+desktop launcher. PrettyZap does not add compositor-specific workarounds or a
+settings system for rebinding.
 
 ## Archived indexing bug and fix
 

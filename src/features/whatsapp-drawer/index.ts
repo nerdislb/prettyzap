@@ -1,10 +1,11 @@
 import type { WebContents } from "electron";
+import { focusActiveComposer, recoverFocusAfterEscape } from "../whatsapp-focus";
+import { waitForWhatsAppShell } from "../whatsapp-readiness";
 import { whatsappDrawerSelectors } from "./selectors";
 
 const TOGGLE_ID = "prettyzap-whatsapp-drawer-toggle";
+const DRAWER_STATE_EVENT = "prettyzap-drawer-state";
 const STYLE_ID = "prettyzap-whatsapp-drawer-style";
-const CHAT_LIST_HIDDEN = "data-prettyzap-chat-list-hidden";
-const CHAT_LIST_SHELL = "data-prettyzap-chat-list-shell";
 const CHAT_CYCLE_IDLE_MS = 700;
 const ARCHIVED_VIEW_DESCRIPTION =
   "These chats stay archived when new messages are received.";
@@ -92,19 +93,6 @@ function createScrollConversationScript(direction: "up" | "down"): string {
 
     const distance = Math.max(240, messages.clientHeight * 0.75);
     messages.scrollBy({ top: distance * ${multiplier}, behavior: "smooth" });
-    return true;
-  })()`;
-}
-
-function createFocusComposerScript(): string {
-  const selectors = JSON.stringify(whatsappDrawerSelectors);
-
-  return `(() => {
-    const selectors = ${selectors};
-    const composer = document.querySelector(selectors.messageComposer);
-    if (!(composer instanceof HTMLElement)) return false;
-
-    composer.focus({ preventScroll: true });
     return true;
   })()`;
 }
@@ -276,41 +264,69 @@ function createCycleChatsScript(direction: "forward" | "backward"): string {
   })()`;
 }
 
+const drawerRoot = '[data-testid="wa-web-main-screen"][data-prettyzap-drawer-collapsed="true"]';
 const drawerStyle = `
-  [${CHAT_LIST_HIDDEN}="true"],
-  [${CHAT_LIST_SHELL}="true"] {
-    display: none !important;
+  /* Resize the actual sidebar flex pane; do not hide its descendants. */
+  ${drawerRoot} ${whatsappDrawerSelectors.chatListShell} {
+    flex: 0 0 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+  }
+
+  ${drawerRoot} ${whatsappDrawerSelectors.chatListShell} #side,
+  ${drawerRoot} ${whatsappDrawerSelectors.chatListShell} #side * {
+    overflow: hidden !important;
+  }
+
+  ${drawerRoot} [data-testid="drawer-left"],
+  ${drawerRoot} [data-testid="drawer-middle"] {
+    border-inline-start-width: 0 !important;
+    border-inline-end-width: 0 !important;
+  }
+
+  ${drawerRoot} [data-testid="drawer-middle"],
+  ${drawerRoot} [data-testid="conversation-panel-wrapper"] {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
   }
 
   ${whatsappDrawerSelectors.navigationRail} {
     position: relative !important;
+    z-index: 2147483640 !important;
     box-sizing: border-box !important;
+    overflow: visible !important;
     border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
   }
 
   #${TOGGLE_ID} {
-    position: absolute !important;
-    /* Keep the toggle below WhatsApp's rail actions on compact windows. */
-    top: clamp(360px, 50%, 560px) !important;
-    left: 50% !important;
-    z-index: 20 !important;
+    position: fixed !important;
+    top: 50% !important;
+    right: auto !important;
+    left: 50px !important;
+    z-index: 2147483647 !important;
     display: grid !important;
-    width: 30px !important;
-    height: 34px !important;
+    width: 28px !important;
+    height: 28px !important;
     padding: 0 !important;
     place-items: center !important;
-    transform: translate(-50%, -50%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 8px !important;
-    color: rgba(233, 237, 239, 0.86) !important;
-    background: rgba(34, 40, 44, 0.88) !important;
+    transform: translateY(-50%) !important;
+    border: 1px solid rgba(202, 204, 204, 0.2) !important;
+    border-radius: 50% !important;
+    color: rgba(202, 204, 204, 0.84) !important;
+    background: rgba(16, 19, 21, 0.92) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24) !important;
     cursor: pointer !important;
   }
 
   #${TOGGLE_ID}:hover {
-    border-color: rgba(0, 168, 132, 0.72) !important;
+    border-color: rgba(121, 129, 134, 0.9) !important;
     color: #ffffff !important;
-    background: rgba(0, 168, 132, 0.18) !important;
+    background: rgba(52, 61, 65, 0.96) !important;
   }
 
   #${TOGGLE_ID}:focus-visible {
@@ -329,15 +345,13 @@ const drawerStyle = `
   }
 `;
 
-function createDrawerScript(): string {
+function createDrawerScript(initialCollapsed: boolean): string {
   const selectors = JSON.stringify(whatsappDrawerSelectors);
 
   return `(() => {
     const selectors = ${selectors};
     const toggleId = ${JSON.stringify(TOGGLE_ID)};
     const styleId = ${JSON.stringify(STYLE_ID)};
-    const chatListHidden = ${JSON.stringify(CHAT_LIST_HIDDEN)};
-    const chatListShell = ${JSON.stringify(CHAT_LIST_SHELL)};
     const root = document.querySelector(selectors.applicationRoot);
     const rail = document.querySelector(selectors.navigationRail);
 
@@ -374,41 +388,11 @@ function createDrawerScript(): string {
       window.__prettyzapArchivedCycleResetInstalled = true;
     }
 
-    const clearChatListMarkers = () => {
-      document.querySelectorAll("[" + chatListHidden + "], [" + chatListShell + "]")
-        .forEach((element) => {
-          element.removeAttribute(chatListHidden);
-          element.removeAttribute(chatListShell);
-        });
-    };
-
-    const findChatListTargets = () => {
-      const chatListShellElement = document.querySelector(selectors.chatListShell);
-      const chatList = document.querySelector(selectors.chatListColumn);
-      const chatListParent = chatList?.parentElement;
-      const railRect = rail.getBoundingClientRect();
-      const chatListHeader = [...document.querySelectorAll(selectors.chatListHeader)]
-        .find((element) => {
-          return element !== rail && element.getBoundingClientRect().width > railRect.width * 2;
-        });
-
-      return [chatListShellElement, chatList, chatListParent, chatListHeader].filter(Boolean);
-    };
-
     const setCollapsed = (collapsed) => {
-      clearChatListMarkers();
-      if (collapsed) {
-        const targets = findChatListTargets();
-        const chatList = document.querySelector(selectors.chatListColumn);
-        targets.forEach((element) => {
-          if (element === chatList) {
-            element.setAttribute(chatListHidden, "true");
-          } else {
-            element.setAttribute(chatListShell, "true");
-          }
-        });
-      }
       root.setAttribute("data-prettyzap-drawer-collapsed", String(collapsed));
+      document.dispatchEvent(new CustomEvent(${JSON.stringify(DRAWER_STATE_EVENT)}, {
+        detail: { collapsed },
+      }));
       const button = document.getElementById(toggleId);
       if (!button) return;
 
@@ -434,8 +418,8 @@ function createDrawerScript(): string {
       rail.appendChild(button);
     }
 
-    // The first drawer slice starts compact while leaving WhatsApp's rail visible.
-    setCollapsed(root.getAttribute("data-prettyzap-drawer-collapsed") !== "false");
+    const existingCollapsed = root.getAttribute("data-prettyzap-drawer-collapsed");
+    setCollapsed(existingCollapsed === null ? ${JSON.stringify(initialCollapsed)} : existingCollapsed === "true");
     return {
       installed: true,
       collapsed: root.getAttribute("data-prettyzap-drawer-collapsed"),
@@ -443,13 +427,18 @@ function createDrawerScript(): string {
   })()`;
 }
 
-export function installWhatsAppDrawer(webContents: WebContents): () => void {
+export function installWhatsAppDrawer(
+  webContents: WebContents,
+  initialCollapsed = true,
+): () => void {
   let cycleHideTimer: ReturnType<typeof setTimeout> | undefined;
+  let escapeFocusRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
   let cycleOpenedDrawer = false;
+  let disposed = false;
+  let loadGeneration = 0;
   const focusSearchScript = createFocusSearchScript();
   const scrollUpScript = createScrollConversationScript("up");
   const scrollDownScript = createScrollConversationScript("down");
-  const focusComposerScript = createFocusComposerScript();
   const openArchivedScript = createOpenArchivedScript();
   const cycleChatsForwardScript = createCycleChatsScript("forward");
   const cycleChatsBackwardScript = createCycleChatsScript("backward");
@@ -460,6 +449,23 @@ export function installWhatsAppDrawer(webContents: WebContents): () => void {
     ]),
   );
   const onBeforeInput = (event: Electron.Event, input: Electron.Input): void => {
+    const isPlainEscape =
+      input.type === "keyDown" &&
+      !input.control &&
+      !input.meta &&
+      !input.alt &&
+      !input.shift &&
+      input.key === "Escape";
+
+    if (isPlainEscape) {
+      if (escapeFocusRecoveryTimer) clearTimeout(escapeFocusRecoveryTimer);
+      escapeFocusRecoveryTimer = setTimeout(() => {
+        escapeFocusRecoveryTimer = undefined;
+        void recoverFocusAfterEscape(webContents);
+      }, 0);
+      return;
+    }
+
     const isToggleShortcut =
       input.type === "keyDown" &&
       (input.control || input.meta) &&
@@ -538,13 +544,16 @@ export function installWhatsAppDrawer(webContents: WebContents): () => void {
             : isScrollUpShortcut
               ? scrollUpScript
               : isFocusComposerShortcut
-                ? focusComposerScript
+                ? undefined
                 : isOpenArchivedShortcut
                   ? openArchivedScript
                   : isCycleChatsForwardShortcut
                   ? cycleChatsForwardScript
                   : cycleChatsBackwardScript;
-    if (!script) return;
+    if (!script) {
+      if (isFocusComposerShortcut) void focusActiveComposer(webContents);
+      return;
+    }
 
     const isCycleShortcut = isCycleChatsForwardShortcut || isCycleChatsBackwardShortcut;
     void webContents.executeJavaScript(script).then((result) => {
@@ -629,23 +638,27 @@ export function installWhatsAppDrawer(webContents: WebContents): () => void {
   };
 
   const apply = (): void => {
-    const applyLayout = (): void => {
-      void webContents.executeJavaScript(createDrawerScript()).catch((error: unknown) => {
-        console.warn("Unable to install PrettyZap WhatsApp drawer", error);
-      });
-    };
-
-    applyLayout();
-    [1000, 3000, 6000, 10000, 15000, 30000].forEach((delay) =>
-      setTimeout(applyLayout, delay),
-    );
+    const generation = ++loadGeneration;
+    void waitForWhatsAppShell(webContents).then((state) => {
+      if (disposed || generation !== loadGeneration || webContents.isDestroyed()) return;
+      if (!state.ready) {
+        console.warn("PrettyZap drawer skipped: WhatsApp chat shell was not ready", state);
+        return;
+      }
+      return webContents.executeJavaScript(createDrawerScript(initialCollapsed));
+    }).catch((error: unknown) => {
+      console.warn("Unable to install PrettyZap WhatsApp drawer", error);
+    });
   };
 
   webContents.on("did-finish-load", apply);
   webContents.on("before-input-event", onBeforeInput);
 
   return () => {
+    disposed = true;
+    loadGeneration += 1;
     if (cycleHideTimer) clearTimeout(cycleHideTimer);
+    if (escapeFocusRecoveryTimer) clearTimeout(escapeFocusRecoveryTimer);
     webContents.removeListener("did-finish-load", apply);
     webContents.removeListener("before-input-event", onBeforeInput);
   };

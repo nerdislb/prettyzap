@@ -6,7 +6,11 @@ export const whatsappDrawerSelectors = {
   applicationRoot: '[data-testid="wa-web-main-screen"]',
   navigationRail: 'header[data-testid="chatlist-header"]',
   chatListHeader: 'header[data-testid="chatlist-header"]',
-  chatListShell: '[data-testid="drawer-left"]',
+  // WhatsApp keeps #side inside a flex pane without a dedicated test id.
+  // The structural selector is the same stable relationship used by mature
+  // Web WhatsApp sidebar styles; the data-testid fallback covers revisions
+  // that expose the pane directly.
+  chatListShell: ':is([data-testid="drawer-left"], div.two > div:has(#side))',
   chatListColumn: '#side',
   chatListSearch: 'input[placeholder="Search or start a new chat"]',
   // WhatsApp renders its two lists differently. The standard list is a grid,
