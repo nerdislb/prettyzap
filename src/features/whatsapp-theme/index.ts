@@ -343,6 +343,10 @@ export function installWhatsAppTheme(
   let omarchyThemeWatcher: fs.FSWatcher | undefined;
   let documentReady = false;
   let loadGeneration = 0;
+  // Whether the palette was actually pushed into the page at least once.
+  // The 1s palette poll uses this to re-apply after a skipped initial pass
+  // instead of wrongly assuming the first document pass installed it.
+  let appliedOnce = false;
 
   const removeStylesheet = async (): Promise<void> => {
     const key = stylesheetKey;
@@ -379,6 +383,7 @@ export function installWhatsAppTheme(
     if (disposed || webContents.isDestroyed()) return;
     await installStylesheet();
     await applyMarker();
+    appliedOnce = true;
   };
 
   const queue = (operation: () => Promise<void>): void => {
@@ -407,17 +412,28 @@ export function installWhatsAppTheme(
   const onFinishedLoad = (): void => {
     documentReady = true;
     const generation = ++loadGeneration;
-    queue(async () => {
-      const state = await waitForWhatsAppShell(webContents);
-      if (disposed || generation !== loadGeneration || !state.ready) {
-        if (!disposed && !state.ready) {
+    // The chat shell is often not ready on the first ever load after a fresh
+    // login or a slow reconnect, and the post-login transition can happen
+    // without a new did-finish-load. Retry until the shell appears instead of
+    // giving up permanently (previous builds left the palette unapplied
+    // until a manual reload).
+    const attempt = (remaining: number): void => {
+      queue(async () => {
+        const state = await waitForWhatsAppShell(webContents);
+        if (disposed || generation !== loadGeneration || !documentReady || webContents.isDestroyed()) return;
+        if (state.ready) {
+          await removeStylesheet();
+          await applyDocument();
+          return;
+        }
+        if (remaining > 0) {
+          setTimeout(() => attempt(remaining - 1), 3_000);
+        } else {
           console.warn("PrettyZap system palette skipped: WhatsApp chat shell was not ready", state);
         }
-        return;
-      }
-      await removeStylesheet();
-      await applyDocument();
-    });
+      });
+    };
+    attempt(5);
   };
   const scheduleThemeRefresh = (): void => {
     if (refreshTimer) clearTimeout(refreshTimer);
@@ -469,7 +485,10 @@ export function installWhatsAppTheme(
       return;
     }
     if (lastState === undefined) {
-      lastState = state; // already applied by the initial document pass
+      lastState = state; // may already be applied by the initial document pass
+      // A skipped initial pass (shell not ready yet) must still be repaired:
+      // re-apply once if nothing reached the page.
+      if (!appliedOnce) scheduleThemeRefresh();
       return;
     }
     if (state !== lastState) {

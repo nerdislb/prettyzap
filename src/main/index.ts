@@ -250,18 +250,42 @@ function showWindow(): void {
   restoreAndFocusPrettyZapWindow();
 }
 
-function quitPrettyZap(): void {
+/**
+ * Wipe everything Chromium persists for the WhatsApp partition (cookies,
+ * local/indexed storage, cache). Used by Privacy mode (sign-out-on-quit) and
+ * the manual “Log out of WhatsApp” action. The partitioned store is fully
+ * readable on disk by any same-user process, so this is the only way to
+ * guarantee no session material survives an exit.
+ */
+async function clearWhatsAppSession(): Promise<void> {
+  try {
+    const webContents = whatsappWebContents;
+    if (webContents && !webContents.isDestroyed()) webContents.close();
+    // Let any in-flight renderer flush settle before clearing the store.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const whatsappSession = session.fromPartition(WHATSAPP_PARTITION);
+    await whatsappSession.clearStorageData();
+    await whatsappSession.cookies.flushStore();
+    console.info("PrettyZap signed out: WhatsApp session storage cleared");
+  } catch (error: unknown) {
+    console.warn("PrettyZap could not clear the WhatsApp session", error);
+  }
+}
+
+async function quitPrettyZap(): Promise<void> {
   isQuitting = true;
   persistShellState();
+  if (shellState.signOutOnQuit) await clearWhatsAppSession();
   app.quit();
 }
 
-function settingsSnapshot(): Pick<ShellState, "drawerCollapsed" | "whatsappTheme" | "notificationsEnabled" | "shortcuts"> {
+function settingsSnapshot(): Pick<ShellState, "drawerCollapsed" | "whatsappTheme" | "notificationsEnabled" | "shortcuts" | "signOutOnQuit"> {
   return {
     drawerCollapsed: shellState.drawerCollapsed,
     whatsappTheme: shellState.whatsappTheme,
     notificationsEnabled: shellState.notificationsEnabled,
     shortcuts: { ...shellState.shortcuts },
+    signOutOnQuit: shellState.signOutOnQuit,
   };
 }
 
@@ -285,7 +309,7 @@ function settingsPage(): string {
 <label>Green<span class="color-row"><input type="color" data-color-key="green" value="#ffc107"><input type="text" data-color-hex="green" value="#ffc107" spellcheck="false" autocomplete="off"></span></label>
 <label>Blue<span class="color-row"><input type="color" data-color-key="blue" value="#e68e0d"><input type="text" data-color-hex="blue" value="#e68e0d" spellcheck="false" autocomplete="off"></span></label>
 </div><div class="inline-actions"><button id="resetColors">Reset to defaults</button><span class="hint" style="margin:0">Changes apply to WhatsApp immediately.</span></div></section>
-<section class="card"><h2>Behavior</h2><label class="check"><input id="drawerCollapsed" type="checkbox"> Start the chat drawer collapsed</label><div class="hint">This takes effect the next time the app opens.</div></section>
+<section class="card"><h2>Behavior</h2><label class="check"><input id="drawerCollapsed" type="checkbox"> Start the chat drawer collapsed</label><div class="hint">This takes effect the next time the app opens.</div><label class="check" style="margin-top:14px"><input id="signOutOnQuit" type="checkbox"> Sign out of WhatsApp when PrettyZap quits</label><div class="hint">Wipes the saved session (cookies, local and indexed storage) on exit so nothing recoverable remains on disk. You will need to scan the WhatsApp QR code again after each quit.</div></section>
 <section class="card"><h2>Shortcuts</h2><div class="grid">
 <label>Toggle drawer<input type="text" data-key="toggleDrawer" autocomplete="off"></label><label>Focus chat search<input type="text" data-key="search" autocomplete="off"></label>
 <label>Open Archived<input type="text" data-key="openArchived" autocomplete="off"></label><label>Focus composer<input type="text" data-key="focusComposer" autocomplete="off"></label>
@@ -297,7 +321,7 @@ function settingsPage(): string {
 <label>Tab 7<input type="text" data-key="navigation.7" autocomplete="off"></label><label>Tab 8<input type="text" data-key="navigation.8" autocomplete="off"></label>
 </div><div class="hint">Click a shortcut field, then press the desired combination. For example: Ctrl+Shift+A, Ctrl+1, or Cmd+K.</div></section>
 </main><footer class="actions"><div id="status" role="status" aria-live="polite"></div><div class="buttons"><button id="cancel">Close</button><button class="primary" id="save">Save settings</button></div></footer>
-<script>const api=window.prettyZapSettings;const fields=[...document.querySelectorAll('[data-key]')];const read=(shortcuts,key)=>key.split('.').reduce((value,part)=>value?.[part],shortcuts);const setStatus=(message,type)=>{status.textContent=message;status.className=type};const collect=()=>{const shortcuts={};fields.forEach(e=>{const parts=e.dataset.key.split('.');if(parts.length===1)shortcuts[parts[0]]=e.value.trim();else{shortcuts[parts[0]]??={};shortcuts[parts[0]][parts[1]]=e.value.trim()}});return shortcuts};const prettyKey=e=>{if(e.key===' ')return 'Space';if(e.key==='Escape')return 'Escape';if(e.key==='Enter')return 'Enter';if(e.key.length===1)return e.key.toUpperCase();return e.key};fields.forEach(field=>field.addEventListener('keydown',e=>{if(['Tab','Shift','Control','Alt','Meta'].includes(e.key))return;e.preventDefault();const parts=[];if(e.ctrlKey)parts.push('Ctrl');if(e.metaKey)parts.push('Cmd');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');parts.push(prettyKey(e));field.value=parts.join('+')}));api.get().then(s=>{fields.forEach(e=>e.value=read(s.shortcuts,e.dataset.key)||'');systemTheme.checked=s.whatsappTheme==='system';drawerCollapsed.checked=s.drawerCollapsed}).catch(()=>setStatus('Unable to load settings','error'));save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';setStatus('Applying changes…','success');try{const saved=await api.update({shortcuts:collect(),whatsappTheme:systemTheme.checked?'system':'whatsapp',drawerCollapsed:drawerCollapsed.checked});fields.forEach(e=>e.value=read(saved.shortcuts,e.dataset.key)||'');setStatus('✓ Settings saved and applied','success')}catch(error){setStatus('Could not save settings','error')}finally{save.disabled=false;save.textContent='Save settings'}};cancel.onclick=()=>api.close();
+<script>const api=window.prettyZapSettings;const fields=[...document.querySelectorAll('[data-key]')];const read=(shortcuts,key)=>key.split('.').reduce((value,part)=>value?.[part],shortcuts);const setStatus=(message,type)=>{status.textContent=message;status.className=type};const collect=()=>{const shortcuts={};fields.forEach(e=>{const parts=e.dataset.key.split('.');if(parts.length===1)shortcuts[parts[0]]=e.value.trim();else{shortcuts[parts[0]]??={};shortcuts[parts[0]][parts[1]]=e.value.trim()}});return shortcuts};const prettyKey=e=>{if(e.key===' ')return 'Space';if(e.key==='Escape')return 'Escape';if(e.key==='Enter')return 'Enter';if(e.key.length===1)return e.key.toUpperCase();return e.key};fields.forEach(field=>field.addEventListener('keydown',e=>{if(['Tab','Shift','Control','Alt','Meta'].includes(e.key))return;e.preventDefault();const parts=[];if(e.ctrlKey)parts.push('Ctrl');if(e.metaKey)parts.push('Cmd');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');parts.push(prettyKey(e));field.value=parts.join('+')}));api.get().then(s=>{fields.forEach(e=>e.value=read(s.shortcuts,e.dataset.key)||'');systemTheme.checked=s.whatsappTheme==='system';drawerCollapsed.checked=s.drawerCollapsed;signOutOnQuit.checked=s.signOutOnQuit===true}).catch(()=>setStatus('Unable to load settings','error'));save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';setStatus('Applying changes…','success');try{const saved=await api.update({shortcuts:collect(),whatsappTheme:systemTheme.checked?'system':'whatsapp',drawerCollapsed:drawerCollapsed.checked,signOutOnQuit:signOutOnQuit.checked});fields.forEach(e=>e.value=read(saved.shortcuts,e.dataset.key)||'');setStatus('✓ Settings saved and applied','success')}catch(error){setStatus('Could not save settings','error')}finally{save.disabled=false;save.textContent='Save settings'}};cancel.onclick=()=>api.close();
 const colorFields=[...document.querySelectorAll('[data-color-key]')];
 const hexFields=[...document.querySelectorAll('[data-color-hex]')];
 const modeSelect=document.getElementById('paletteMode');
@@ -586,6 +610,18 @@ function installApplicationMenu(): void {
         },
         { type: "separator" },
         {
+          label: "Log out of WhatsApp",
+          click: () => {
+            void (async () => {
+              await clearWhatsAppSession();
+              if (whatsappWebContents && !whatsappWebContents.isDestroyed()) {
+                whatsappWebContents.reload();
+              }
+            })();
+          },
+        },
+        { type: "separator" },
+        {
           label: "Use WhatsApp appearance",
           type: "radio",
           click: () => whatsappThemeController?.setMode("whatsapp"),
@@ -813,6 +849,9 @@ ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (_event, value: unknown) => {
   }
   if (typeof candidate.notificationsEnabled === "boolean") {
     setNotificationsEnabled(candidate.notificationsEnabled);
+  }
+  if (typeof candidate.signOutOnQuit === "boolean") {
+    shellState.signOutOnQuit = candidate.signOutOnQuit;
   }
   if (candidate.shortcuts && typeof candidate.shortcuts === "object") {
     Object.assign(shellState.shortcuts, normalizeShortcutPreferences(candidate.shortcuts));

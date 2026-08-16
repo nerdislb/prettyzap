@@ -9,6 +9,8 @@ export interface ShellState {
   drawerCollapsed: boolean;
   whatsappTheme: "whatsapp" | "system";
   notificationsEnabled: boolean;
+  /** Wipe the WhatsApp session (cookies, local/indexed storage) on quit. */
+  signOutOnQuit: boolean;
   /** Keep the custom palette even when the Omarchy theme changes. */
   colorsPinned: boolean;
   shortcuts: ShortcutPreferences;
@@ -33,6 +35,7 @@ export const DEFAULT_SHELL_STATE: ShellState = {
   drawerCollapsed: true,
   whatsappTheme: "whatsapp",
   notificationsEnabled: true,
+  signOutOnQuit: false,
   colorsPinned: false,
   shortcuts: {
     toggleDrawer: "Ctrl+L",
@@ -92,6 +95,7 @@ export function normalizeShellState(value: unknown): ShellState {
     drawerCollapsed: candidate.drawerCollapsed !== false,
     whatsappTheme: candidate.whatsappTheme === "system" ? "system" : "whatsapp",
     notificationsEnabled: candidate.notificationsEnabled !== false,
+    signOutOnQuit: candidate.signOutOnQuit === true,
     colorsPinned: candidate.colorsPinned === true,
     shortcuts: normalizeShortcutPreferences(candidate.shortcuts),
   };

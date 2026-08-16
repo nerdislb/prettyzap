@@ -670,16 +670,29 @@ export function installWhatsAppDrawer(
 
   const apply = (): void => {
     const generation = ++loadGeneration;
-    void waitForWhatsAppShell(webContents).then((state) => {
-      if (disposed || generation !== loadGeneration || webContents.isDestroyed()) return;
-      if (!state.ready) {
-        console.warn("PrettyZap drawer skipped: WhatsApp chat shell was not ready", state);
-        return;
-      }
-      return webContents.executeJavaScript(createDrawerScript(initialCollapsed));
-    }).catch((error: unknown) => {
-      console.warn("Unable to install PrettyZap WhatsApp drawer", error);
-    });
+    // Same retry policy as the theme installer: after a fresh login or slow
+    // reconnect the chat shell can appear without a new did-finish-load, so
+    // keep checking instead of skipping once and staying broken until a
+    // manual reload.
+    const attempt = (remaining: number): void => {
+      void waitForWhatsAppShell(webContents).then((state) => {
+        if (disposed || generation !== loadGeneration || webContents.isDestroyed()) return;
+        if (!state.ready) {
+          if (remaining > 0) {
+            setTimeout(() => attempt(remaining - 1), 3_000);
+          } else {
+            console.warn("PrettyZap drawer skipped: WhatsApp chat shell was not ready", state);
+          }
+          return;
+        }
+        return webContents.executeJavaScript(createDrawerScript(initialCollapsed)).catch((error: unknown) => {
+          console.warn("Unable to install PrettyZap WhatsApp drawer", error);
+        });
+      }).catch((error: unknown) => {
+        console.warn("Unable to install PrettyZap WhatsApp drawer", error);
+      });
+    };
+    attempt(5);
   };
 
   webContents.on("did-finish-load", apply);
