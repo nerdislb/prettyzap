@@ -373,6 +373,8 @@ export function installWhatsAppTheme(
   let disposed = false;
   let applyChain = Promise.resolve();
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let palettePollTimer: ReturnType<typeof setInterval> | undefined;
+  let lastPaletteSource: string | undefined;
   let themeWatcher: fs.FSWatcher | undefined;
   let documentReady = false;
   let loadGeneration = 0;
@@ -464,6 +466,27 @@ export function installWhatsAppTheme(
     }, 200);
   };
 
+  // Omarchy may replace colors.toml (or its containing theme directory) during
+  // a theme switch. A native fs.watch subscription can stop receiving events
+  // after that replacement, so keep a small content snapshot as a resilient
+  // fallback for subsequent theme changes.
+  const pollPaletteSource = async (): Promise<void> => {
+    try {
+      const source = await fs.promises.readFile(palettePath(), "utf8");
+      if (lastPaletteSource === undefined) {
+        lastPaletteSource = source;
+        return;
+      }
+      if (source !== lastPaletteSource) {
+        lastPaletteSource = source;
+        scheduleThemeRefresh();
+      }
+    } catch {
+      // The active theme can be briefly absent while Omarchy swaps files.
+      // The next poll will pick it up without disturbing the WhatsApp view.
+    }
+  };
+
   webContents.on("before-input-event", onBeforeInput);
   webContents.on("did-finish-load", onFinishedLoad);
   try {
@@ -471,6 +494,11 @@ export function installWhatsAppTheme(
   } catch (error: unknown) {
     console.warn("Unable to watch the active Omarchy palette", error);
   }
+  void pollPaletteSource();
+  palettePollTimer = setInterval(() => {
+    void pollPaletteSource();
+  }, 1_000);
+  palettePollTimer.unref();
   return {
     toggle: () => setMode(mode === "system" ? "whatsapp" : "system"),
     setMode,
@@ -479,6 +507,7 @@ export function installWhatsAppTheme(
       disposed = true;
       loadGeneration += 1;
       if (refreshTimer) clearTimeout(refreshTimer);
+      if (palettePollTimer) clearInterval(palettePollTimer);
       themeWatcher?.close();
       webContents.removeListener("before-input-event", onBeforeInput);
       webContents.removeListener("did-finish-load", onFinishedLoad);
