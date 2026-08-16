@@ -1,7 +1,12 @@
-import { app, type WebContents } from "electron";
+import type { WebContents } from "electron";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import { waitForWhatsAppShell } from "../whatsapp-readiness";
+import {
+  parsePalette,
+  resolvePaletteSource,
+  type OmarchyPalette,
+  type PaletteSource,
+} from "../../main/palette";
 
 export type WhatsAppThemeMode = "whatsapp" | "system";
 
@@ -9,39 +14,11 @@ export interface WhatsAppThemeController {
   toggle(): void;
   setMode(mode: WhatsAppThemeMode): void;
   getMode(): WhatsAppThemeMode;
+  /** Re-read the palette file and re-apply the stylesheet (tweaker saves). */
+  refreshPalette(): void;
   dispose(): void;
 }
 
-interface OmarchyPalette {
-  mode: "dark" | "light";
-  background: string;
-  darkBackground: string;
-  darkerBackground: string;
-  foreground: string;
-  muted: string;
-  accent: string;
-  selection: string;
-  red: string;
-  yellow: string;
-  green: string;
-  blue: string;
-}
-
-const PALETTE_KEYS = {
-  background: "background",
-  darkBackground: "dark_background",
-  darkerBackground: "darker_background",
-  foreground: "foreground",
-  muted: "muted",
-  accent: "accent",
-  selection: "selection",
-  red: "red",
-  yellow: "yellow",
-  green: "green",
-  blue: "blue",
-} as const;
-
-const HEX_COLOR = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
 const THEME_ATTRIBUTE = "data-prettyzap-theme";
 
 interface Rgb {
@@ -69,44 +46,13 @@ interface ThemeRoles {
 }
 
 function palettePath(): string {
-  const stateHome = process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state");
-  return path.join(stateHome, "omarchy", "current", "theme", "colors.toml");
+  return resolvePaletteSource().file;
 }
 
-export function parseOmarchyPalette(source: string): OmarchyPalette | undefined {
-  const entries = new Map<string, string>();
-  for (const line of source.split(/\r?\n/)) {
-    const match = line.match(/^\s*([a-z_]+)\s*=\s*"(#[0-9a-fA-F]{6,8})"\s*(?:#.*)?$/);
-    if (match && HEX_COLOR.test(match[2])) entries.set(match[1], match[2]);
-  }
-
-  const value = (key: keyof typeof PALETTE_KEYS): string | undefined => entries.get(PALETTE_KEYS[key]);
-  const background = value("background");
-  const darkBackground = value("darkBackground") ?? background;
-  const darkerBackground = value("darkerBackground") ?? darkBackground;
-  const foreground = value("foreground");
-  const muted = value("muted");
-  const accent = value("accent");
-  const selection = value("selection");
-  if (!background || !darkBackground || !darkerBackground || !foreground || !muted || !accent || !selection) {
-    return undefined;
-  }
-
-  return {
-    mode: /^\s*mode\s*=\s*"light"/m.test(source) ? "light" : "dark",
-    background,
-    darkBackground,
-    darkerBackground,
-    foreground,
-    muted,
-    accent,
-    selection,
-    red: value("red") ?? accent,
-    yellow: value("yellow") ?? foreground,
-    green: value("green") ?? accent,
-    blue: value("blue") ?? accent,
-  };
-}
+/**
+ * Derive the theme roles from the active palette. Omarchy's file is the
+ * source when running under Omarchy; otherwise the user's custom palette.
+ */
 
 function parseRgb(hex: string): Rgb {
   const value = hex.slice(1, 7);
@@ -192,13 +138,17 @@ function deriveThemeRoles(palette: OmarchyPalette): ThemeRoles {
   };
 }
 
-async function loadOmarchyPalette(): Promise<OmarchyPalette | undefined> {
+async function loadPalette(): Promise<OmarchyPalette | undefined> {
   try {
-    const palette = parseOmarchyPalette(await fs.promises.readFile(palettePath(), "utf8"));
-    if (!palette) console.warn("PrettyZap could not validate the active Omarchy palette");
+    const palette = parsePalette(await fs.promises.readFile(palettePath(), "utf8"));
+    if (!palette) console.warn("PrettyZap could not validate the active palette");
     return palette;
   } catch (error: unknown) {
-    console.warn("PrettyZap could not read the active Omarchy palette", error);
+    // A missing file is normal before the first tweaker save (custom palette)
+    // or while Omarchy swaps theme files; only report real read errors.
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn("PrettyZap could not read the active palette", error);
+    }
     return undefined;
   }
 }
@@ -405,7 +355,7 @@ export function installWhatsAppTheme(
 
   const installStylesheet = async (): Promise<void> => {
     if (disposed || webContents.isDestroyed() || stylesheetKey) return;
-    const palette = await loadOmarchyPalette();
+    const palette = await loadPalette();
     if (!palette || disposed || webContents.isDestroyed()) return;
     try {
       stylesheetKey = await webContents.insertCSS(createSystemThemeCss(palette));
@@ -479,6 +429,7 @@ export function installWhatsAppTheme(
     }, 200);
   };
 
+  let paletteMissing = false;
   // Omarchy may replace colors.toml (or its containing theme directory) during
   // a theme switch. A native fs.watch subscription can stop receiving events
   // after that replacement, so keep a small content snapshot as a resilient
@@ -486,6 +437,14 @@ export function installWhatsAppTheme(
   const pollPaletteSource = async (): Promise<void> => {
     try {
       const source = await fs.promises.readFile(palettePath(), "utf8");
+      if (paletteMissing) {
+        // The palette reappeared (first custom save, or Omarchy finished a
+        // theme swap): apply it now, not on the next change.
+        paletteMissing = false;
+        lastPaletteSource = source;
+        scheduleThemeRefresh();
+        return;
+      }
       if (lastPaletteSource === undefined) {
         lastPaletteSource = source;
         return;
@@ -495,17 +454,29 @@ export function installWhatsAppTheme(
         scheduleThemeRefresh();
       }
     } catch {
-      // The active theme can be briefly absent while Omarchy swaps files.
-      // The next poll will pick it up without disturbing the WhatsApp view.
+      paletteMissing = true;
+      // The active palette can be briefly absent while the tweaker swaps
+      // files or Omarchy switches themes. The next poll picks it up without
+      // disturbing the WhatsApp view.
     }
   };
 
   webContents.on("before-input-event", onBeforeInput);
   webContents.on("did-finish-load", onFinishedLoad);
   try {
-    themeWatcher = fs.watch(path.dirname(palettePath()), { persistent: false }, scheduleThemeRefresh);
+    const source: PaletteSource = resolvePaletteSource();
+    themeWatcher = fs.watch(source.watchDir, { persistent: false }, (_eventType, filename) => {
+      // The custom palette shares its directory with shell-state.json and
+      // status.json, whose writes must not re-apply the stylesheet. Omarchy's
+      // theme directory can be swapped wholesale (filename may be null), so
+      // only filter when the kernel reports a concrete, different filename.
+      if (source.kind === "custom" && typeof filename === "string" && filename !== "colors.toml") {
+        return;
+      }
+      scheduleThemeRefresh();
+    });
   } catch (error: unknown) {
-    console.warn("Unable to watch the active Omarchy palette", error);
+    console.warn("Unable to watch the active palette", error);
   }
   void pollPaletteSource();
   palettePollTimer = setInterval(() => {
@@ -516,6 +487,10 @@ export function installWhatsAppTheme(
     toggle: () => setMode(mode === "system" ? "whatsapp" : "system"),
     setMode,
     getMode: () => mode,
+    refreshPalette: () => {
+      if (disposed || !documentReady) return;
+      scheduleThemeRefresh();
+    },
     dispose: () => {
       disposed = true;
       loadGeneration += 1;

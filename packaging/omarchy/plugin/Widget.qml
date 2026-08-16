@@ -26,7 +26,6 @@ BarWidget {
   }
   function toggleApp() { data.toggle() }
   function handleBarClick(buttonCode) {
-    console.warn("PRETTYZAP_CLICK", buttonCode)
     if (buttonCode === Qt.RightButton) root.toggle()
     else if (buttonCode === Qt.MiddleButton) data.openSettings()
     else data.toggle()
@@ -38,8 +37,8 @@ BarWidget {
   Data { id: data }
 
   Component.onCompleted: {
-    console.warn("PRETTYZAP_WIDGET_READY", moduleName)
     data.launchCommand = String(setting("launchCommand", "uwsm-app -- prettyzap"))
+    root.showBrand = String(setting("icon", "glyph")) === "brand"
   }
 
   // This follows Quattro's documented third-party bar-widget pattern: the
@@ -47,7 +46,23 @@ BarWidget {
   implicitWidth: Style.bar.statusSlot
   implicitHeight: barSize
 
+  // Icon surface: the declared `icon` setting switches between the PrettyZap
+  // brand mark (assets/prettyzap.svg) and the WhatsApp glyph (default).
+  property bool showBrand: false
+
+  Image {
+    visible: root.showBrand
+    anchors.centerIn: parent
+    width: Style.bar.iconFont
+    height: Style.bar.iconFont
+    source: Qt.resolvedUrl("assets/prettyzap.svg")
+    sourceSize.width: 32
+    sourceSize.height: 32
+    fillMode: Image.PreserveAspectFit
+  }
+
   Text {
+    visible: !root.showBrand
     anchors.centerIn: parent
     text: "\uf075"
     color: root.foreground
@@ -164,6 +179,15 @@ BarWidget {
         width: parent.width
         text: "Settings"
         iconText: "󰒓"
+        leftAlign: true
+        foreground: root.foreground
+        onClicked: { data.openSettings(); root.close() }
+      }
+
+      Button {
+        width: parent.width
+        text: "Colors…"
+        iconText: "󰏘"
         leftAlign: true
         foreground: root.foreground
         onClicked: { data.openSettings(); root.close() }

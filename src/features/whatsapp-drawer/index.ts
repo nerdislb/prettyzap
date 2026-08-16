@@ -8,8 +8,6 @@ const TOGGLE_ID = "prettyzap-whatsapp-drawer-toggle";
 const DRAWER_STATE_EVENT = "prettyzap-drawer-state";
 const STYLE_ID = "prettyzap-whatsapp-drawer-style";
 const CHAT_CYCLE_IDLE_MS = 700;
-const ARCHIVED_VIEW_DESCRIPTION =
-  "These chats stay archived when new messages are received.";
 const NAVIGATION_SHORTCUTS = {
   "1": "chats",
   "2": "calls",
@@ -121,21 +119,28 @@ function createScrollConversationScript(direction: "up" | "down"): string {
 
 function createOpenArchivedScript(): string {
   const selectors = JSON.stringify(whatsappDrawerSelectors);
-  const archivedDescription = JSON.stringify(ARCHIVED_VIEW_DESCRIPTION);
 
   return `(() => {
     const selectors = ${selectors};
     const root = document.querySelector(selectors.applicationRoot);
     const toggle = document.getElementById(${JSON.stringify(TOGGLE_ID)});
+    const chatsButton = document.querySelector(selectors.navigationButtons.chats);
 
-    if (document.body.innerText.includes(${archivedDescription})) return false;
+    const isVisible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        rect.width > 0 &&
+        rect.height > 0;
+    };
 
     const findArchivedEntry = () => {
       const candidates = [...document.querySelectorAll("*")].filter((element) => {
         const label = element.textContent?.replace(/\\s+/g, " ").trim() ?? "";
         if (label !== "Archived" && !/^Archived[0-9]+$/.test(label)) return false;
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
+        return isVisible(element);
       });
 
       return candidates.sort((left, right) => {
@@ -145,21 +150,40 @@ function createOpenArchivedScript(): string {
       })[0];
     };
 
+    const archivedListIsVisible = () => isVisible(document.querySelector(selectors.archivedChatList));
+    if (archivedListIsVisible()) return false;
+
+    // Always return to WhatsApp's root Chats list first. This makes the
+    // shortcut independent of the current Calls/Status/Channels/etc. tab and
+    // avoids measuring coordinates while the drawer is still resizing.
     if (
       root?.getAttribute("data-prettyzap-drawer-collapsed") === "true" &&
       toggle instanceof HTMLButtonElement
     ) {
       toggle.click();
     }
+    // This is deliberately the same root action as Ctrl+1: always activate
+    // the Chats tab, even when WhatsApp's selected-state attributes are stale
+    // during a tab or drawer transition.
+    if (chatsButton instanceof HTMLButtonElement) chatsButton.click();
 
     return new Promise((resolve) => {
-      window.requestAnimationFrame(() => {
-        const entry = findArchivedEntry();
+      const deadline = Date.now() + 900;
+      let settled = false;
+      let observer;
+      let retryId;
+      let timeoutId;
+
+      const finish = (entry) => {
+        if (settled) return;
+        settled = true;
+        observer?.disconnect();
+        window.cancelAnimationFrame(retryId);
+        window.clearTimeout(timeoutId);
         if (!(entry instanceof HTMLElement)) {
           resolve(null);
           return;
         }
-
         const rect = entry.getBoundingClientRect();
         resolve({
           x: rect.left + rect.width / 2,
@@ -167,7 +191,29 @@ function createOpenArchivedScript(): string {
           archivedLabel: entry.textContent?.trim(),
           archivedHtml: entry.outerHTML.slice(0, 200),
         });
-      });
+      };
+
+      const inspect = () => {
+        const collapsed = root?.getAttribute("data-prettyzap-drawer-collapsed") === "true";
+        const entry = !collapsed && !archivedListIsVisible() ? findArchivedEntry() : null;
+        if (entry) {
+          finish(entry);
+          return;
+        }
+        if (Date.now() >= deadline) finish(findArchivedEntry());
+        else retryId = window.requestAnimationFrame(inspect);
+      };
+
+      observer = new MutationObserver(inspect);
+      if (document.documentElement) {
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+        });
+      }
+      timeoutId = window.setTimeout(() => finish(findArchivedEntry()), 950);
+      inspect();
     });
   })()`;
 }

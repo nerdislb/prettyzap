@@ -286,6 +286,15 @@ ShellRoot {
           }
 
           ActionButton {
+            label: "Colors"
+            enabled: data.installed
+            onClicked: {
+              data.openSettings()
+              popup.visible = false
+            }
+          }
+
+          ActionButton {
             label: "Theme"
             enabled: data.running
             onClicked: {

@@ -19,7 +19,7 @@
     "defaultSection": "right",
     "defaults": {
       "launchCommand": "uwsm-app -- prettyzap",
-      "icon": "brand"
+      "icon": "glyph"
     },
     "schema": [
       {
@@ -34,7 +34,7 @@
         "type": "string",
         "label": "Icon style",
         "description": "brand (PrettyZap logo) or glyph (WhatsApp symbol).",
-        "defaultValue": "brand"
+        "defaultValue": "glyph"
       }
     ]
   }

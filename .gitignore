@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.log
 .DS_Store
+.pi/
+
+# makepkg staging output inside the AUR packaging tree
+packaging/aur/prettyzap-omarchy/pkg/
+packaging/aur/prettyzap-omarchy/src/

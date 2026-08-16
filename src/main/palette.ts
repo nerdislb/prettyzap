@@ -1,0 +1,284 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+/**
+ * Palette handling shared by the theme feature and the settings IPC.
+ *
+ * PrettyZap consumes the same palette keys Omarchy's themes use
+ * (mode + background/dark_background/darker_background/foreground/muted/
+ * accent/selection/red/yellow/green/blue). On Omarchy the live theme file is
+ * the source; everywhere else the user can keep a private copy at
+ * ~/.config/prettyzap/colors.toml (same format) edited from the settings
+ * window. Node-only (no electron import) so it stays unit-testable.
+ */
+
+export type PaletteMode = "dark" | "light";
+
+export interface OmarchyPalette {
+  mode: PaletteMode;
+  background: string;
+  darkBackground: string;
+  darkerBackground: string;
+  foreground: string;
+  muted: string;
+  accent: string;
+  selection: string;
+  red: string;
+  yellow: string;
+  green: string;
+  blue: string;
+}
+
+/** IPC shape: mode plus one hex color per palette key. */
+export interface PaletteColors {
+  background: string;
+  darkBackground: string;
+  darkerBackground: string;
+  foreground: string;
+  muted: string;
+  accent: string;
+  selection: string;
+  red: string;
+  yellow: string;
+  green: string;
+  blue: string;
+}
+
+export interface PaletteSnapshot {
+  kind: "omarchy" | "custom";
+  mode: PaletteMode;
+  colors: PaletteColors;
+}
+
+export type PaletteSourceKind = PaletteSnapshot["kind"];
+
+export interface PaletteSource {
+  kind: PaletteSourceKind;
+  file: string;
+  watchDir: string;
+}
+
+const PALETTE_KEYS: Record<keyof OmarchyPalette, string> = {
+  mode: "mode",
+  background: "background",
+  darkBackground: "dark_background",
+  darkerBackground: "darker_background",
+  foreground: "foreground",
+  muted: "muted",
+  accent: "accent",
+  selection: "selection",
+  red: "red",
+  yellow: "yellow",
+  green: "green",
+  blue: "blue",
+} as const;
+
+export const COLOR_KEYS = [
+  "background",
+  "darkBackground",
+  "darkerBackground",
+  "foreground",
+  "muted",
+  "accent",
+  "selection",
+  "red",
+  "yellow",
+  "green",
+  "blue",
+] as const;
+
+const HEX_COLOR = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
+
+/**
+ * Whether PrettyZap is running under Omarchy. Mirrors the old check from the
+ * main process: environment markers or the presence of the user's Omarchy
+ * shell config. PRETTYZAP_FORCE_TRAY forces the non-Omarchy path (custom
+ * palette + tray) and PRETTYZAP_DISABLE_TRAY forces the Omarchy path.
+ */
+export function isRunningUnderOmarchy(): boolean {
+  if (process.env.PRETTYZAP_FORCE_TRAY === "1") return false;
+  if (process.env.PRETTYZAP_DISABLE_TRAY === "1") return true;
+  return Boolean(process.env.OMARCHY_PATH)
+    || Boolean(process.env.OMARCHY_VERSION)
+    || fs.existsSync(path.join(os.homedir(), ".config/omarchy/shell.json"));
+}
+
+export function omarchyPalettePath(): string {
+  const stateHome = process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state");
+  return path.join(stateHome, "omarchy", "current", "theme", "colors.toml");
+}
+
+export function prettyZapPalettePath(): string {
+  const configHome = process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
+  return path.join(configHome, "prettyzap", "colors.toml");
+}
+
+export function resolvePaletteSource(): PaletteSource {
+  if (isRunningUnderOmarchy()) {
+    const file = omarchyPalettePath();
+    return { kind: "omarchy", file, watchDir: path.dirname(file) };
+  }
+  const file = prettyZapPalettePath();
+  return { kind: "custom", file, watchDir: path.dirname(file) };
+}
+
+/**
+ * Parse Omarchy's colors.toml format. Required keys: mode (or default dark),
+ * background, dark_background (fallback background), darker_background
+ * (fallback dark_background), foreground, muted, accent, selection. The
+ * red/yellow/green/blue accents fall back to accent/foreground.
+ */
+export function parsePalette(source: string): OmarchyPalette | undefined {
+  const entries = new Map<string, string>();
+  for (const line of source.split(/\r?\n/)) {
+    const match = line.match(/^\s*([a-z_]+)\s*=\s*"(#[0-9a-fA-F]{6,8})"\s*(?:#.*)?$/);
+    if (match && HEX_COLOR.test(match[2])) entries.set(match[1], match[2]);
+  }
+
+  const value = (key: keyof typeof PALETTE_KEYS): string | undefined =>
+    entries.get(PALETTE_KEYS[key]);
+  const background = value("background");
+  const darkBackground = value("darkBackground") ?? background;
+  const darkerBackground = value("darkerBackground") ?? darkBackground;
+  const foreground = value("foreground");
+  const muted = value("muted");
+  const accent = value("accent");
+  const selection = value("selection");
+  if (!background || !darkBackground || !darkerBackground || !foreground || !muted || !accent || !selection) {
+    return undefined;
+  }
+
+  return {
+    mode: /^\s*mode\s*=\s*"light"/m.test(source) ? "light" : "dark",
+    background,
+    darkBackground,
+    darkerBackground,
+    foreground,
+    muted,
+    accent,
+    selection,
+    red: value("red") ?? accent,
+    yellow: value("yellow") ?? foreground,
+    green: value("green") ?? accent,
+    blue: value("blue") ?? accent,
+  };
+}
+
+/**
+ * A neutral dark starting point for the custom palette (values from the
+ * stock Omarchy "matte-black" theme, so the tweaker's defaults are familiar).
+ */
+export const DEFAULT_CUSTOM_PALETTE: OmarchyPalette = {
+  mode: "dark",
+  background: "#121212",
+  darkBackground: "#0d0d0d",
+  darkerBackground: "#090909",
+  foreground: "#bebebe",
+  muted: "#333333",
+  accent: "#e68e0d",
+  selection: "#2a2a2a",
+  red: "#d35f5f",
+  yellow: "#b91c1c",
+  green: "#ffc107",
+  blue: "#e68e0d",
+};
+
+export function paletteToRecord(palette: OmarchyPalette): { mode: PaletteMode; colors: PaletteColors } {
+  return {
+    mode: palette.mode,
+    colors: {
+      background: palette.background,
+      darkBackground: palette.darkBackground,
+      darkerBackground: palette.darkerBackground,
+      foreground: palette.foreground,
+      muted: palette.muted,
+      accent: palette.accent,
+      selection: palette.selection,
+      red: palette.red,
+      yellow: palette.yellow,
+      green: palette.green,
+      blue: palette.blue,
+    },
+  };
+}
+
+/** Validate an untrusted IPC payload and convert it back to a palette. */
+export function recordToPalette(value: unknown): OmarchyPalette | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { mode?: unknown; colors?: unknown };
+  if (candidate.mode !== "dark" && candidate.mode !== "light") return undefined;
+  const colors = candidate.colors;
+  if (!colors || typeof colors !== "object") return undefined;
+  const record = colors as Record<string, unknown>;
+
+  const color = (key: (typeof COLOR_KEYS)[number]): string | undefined => {
+    const hex = record[key];
+    return typeof hex === "string" && HEX_COLOR.test(hex) ? hex.toLowerCase() : undefined;
+  };
+  const palette: OmarchyPalette = {
+    mode: candidate.mode,
+    background: color("background") ?? "",
+    darkBackground: color("darkBackground") ?? "",
+    darkerBackground: color("darkerBackground") ?? "",
+    foreground: color("foreground") ?? "",
+    muted: color("muted") ?? "",
+    accent: color("accent") ?? "",
+    selection: color("selection") ?? "",
+    red: color("red") ?? "",
+    yellow: color("yellow") ?? "",
+    green: color("green") ?? "",
+    blue: color("blue") ?? "",
+  };
+  if (COLOR_KEYS.some((key) => palette[key] === "")) return undefined;
+  return palette;
+}
+
+function formatToml(palette: OmarchyPalette): string {
+  const lines = [
+    "# PrettyZap custom palette — same keys as Omarchy's colors.toml.",
+    "# Used by the System theme when PrettyZap runs outside Omarchy.",
+    `mode = "${palette.mode}"`,
+    "",
+    `background = "${palette.background}"`,
+    `dark_background = "${palette.darkBackground}"`,
+    `darker_background = "${palette.darkerBackground}"`,
+    `foreground = "${palette.foreground}"`,
+    `muted = "${palette.muted}"`,
+    `accent = "${palette.accent}"`,
+    `selection = "${palette.selection}"`,
+    `red = "${palette.red}"`,
+    `yellow = "${palette.yellow}"`,
+    `green = "${palette.green}"`,
+    `blue = "${palette.blue}"`,
+    "",
+  ];
+  return lines.join("\n");
+}
+
+export function writePrettyZapPalette(palette: OmarchyPalette, file = prettyZapPalettePath()): void {
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const temporaryFile = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(temporaryFile, formatToml(palette), { encoding: "utf8", mode: 0o600 });
+    fs.renameSync(temporaryFile, file);
+  } catch (error: unknown) {
+    console.warn("Unable to save PrettyZap palette", error);
+  }
+}
+
+export function readPrettyZapPalette(file = prettyZapPalettePath()): OmarchyPalette | undefined {
+  try {
+    return parsePalette(fs.readFileSync(file, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+export function removePrettyZapPalette(file = prettyZapPalettePath()): void {
+  try {
+    fs.rmSync(file, { force: true });
+  } catch (error: unknown) {
+    console.warn("Unable to remove PrettyZap palette", error);
+  }
+}

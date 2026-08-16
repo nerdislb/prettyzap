@@ -8,7 +8,7 @@
   "description": "Native Omarchy bar control for PrettyZap: open, hide, theme, and quit WhatsApp Web.",
   "kinds": ["bar-widget"],
   "entryPoints": {
-    "barWidget": "Widget.qml"
+    "barWidget": "packaging/omarchy/plugin/Widget.qml"
   },
   "barWidget": {
     "displayName": "PrettyZap",
@@ -19,7 +19,7 @@
     "defaultSection": "right",
     "defaults": {
       "launchCommand": "uwsm-app -- prettyzap",
-      "icon": "brand"
+      "icon": "glyph"
     },
     "schema": [
       {
@@ -34,7 +34,7 @@
         "type": "string",
         "label": "Icon style",
         "description": "brand (PrettyZap logo) or glyph (WhatsApp symbol).",
-        "defaultValue": "brand"
+        "defaultValue": "glyph"
       }
     ]
   }

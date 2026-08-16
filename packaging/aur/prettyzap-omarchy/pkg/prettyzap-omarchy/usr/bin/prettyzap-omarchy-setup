@@ -1,4 +1,0 @@
-#!/bin/sh
-# Install or remove the PrettyZap Omarchy/Quickshell integration.
-#   prettyzap-omarchy-setup [--plugin] [--standalone] [--uninstall]
-exec /usr/share/prettyzap/omarchy/install.sh "$@"

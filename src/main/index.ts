@@ -10,7 +10,6 @@ import {
   shell,
   WebContentsView,
 } from "electron";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { installWhatsAppDrawer } from "../features/whatsapp-drawer";
 import { installWhatsAppTheme } from "../features/whatsapp-theme";
@@ -32,6 +31,17 @@ import {
 import { startDesktopControl, type DesktopControl } from "./desktop-control";
 import { isWindowPresented, resolveToggleAction } from "./window-state";
 import { notificationPolicyScript, parseUnreadCount } from "./unread-count";
+import {
+  DEFAULT_CUSTOM_PALETTE,
+  isRunningUnderOmarchy,
+  paletteToRecord,
+  readPrettyZapPalette,
+  recordToPalette,
+  removePrettyZapPalette,
+  resolvePaletteSource,
+  writePrettyZapPalette,
+  type PaletteSnapshot,
+} from "./palette";
 
 app.setName("PrettyZap");
 
@@ -151,6 +161,9 @@ const WHATSAPP_UNREAD_CHANNEL = "prettyzap:whatsapp-unread";
 const SETTINGS_GET_CHANNEL = "prettyzap:settings-get";
 const SETTINGS_UPDATE_CHANNEL = "prettyzap:settings-update";
 const SETTINGS_CLOSE_CHANNEL = "prettyzap:settings-close";
+const PALETTE_GET_CHANNEL = "prettyzap:palette-get";
+const PALETTE_SET_CHANNEL = "prettyzap:palette-set";
+const PALETTE_RESET_CHANNEL = "prettyzap:palette-reset";
 const MEMORY_RECOVERY_TIMEOUT_MS = 30_000;
 const TRAY_ICON = nativeImage.createFromDataURL(
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAIAAADAAbR1AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRP///////wlY99wAAAAHdElNRQfqCBAAKTh3JqlvAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA4LTE2VDAwOjQxOjU2KzAwOjAw19CgsgAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOC0xNlQwMDo0MTo1NiswMDowMKaNGA4AAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDgtMTZUMDA6NDE6NTYrMDA6MDDxmDnRAAAAYklEQVQ4y2NkYFixoqWFgWaAiXZG08kCFmIU/f8fHl5djSkuyLhertf2A8Ov7h8eFFkAMQhTHL/RBCxAc3U4QzV+g3D5ZuhH8qgFBAHOVIQraeICuJIsC6kaSAVDPw5obgEALmsjxWv//f0AAAAASUVORK5CYII=",
@@ -174,12 +187,19 @@ let desktopControl: DesktopControl | undefined;
 let appReady = false;
 let unreadCount = 0;
 
-function runningUnderOmarchy(): boolean {
-  if (process.env.PRETTYZAP_FORCE_TRAY === "1") return false;
-  if (process.env.PRETTYZAP_DISABLE_TRAY === "1") return true;
-  return Boolean(process.env.OMARCHY_PATH)
-    || Boolean(process.env.OMARCHY_VERSION)
-    || fs.existsSync(path.join(app.getPath("home"), ".config/omarchy/shell.json"));
+function paletteSnapshot(): PaletteSnapshot {
+  const source = resolvePaletteSource();
+  const palette = readPrettyZapPalette() ?? DEFAULT_CUSTOM_PALETTE;
+  const record = paletteToRecord(palette);
+  return {
+    kind: source.kind,
+    mode: record.mode,
+    colors: record.colors,
+  };
+}
+
+function isSettingsSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean {
+  return Boolean(settingsWindow && !settingsWindow.isDestroyed() && event.sender.id === settingsWindow.webContents.id);
 }
 
 function publishStatus(): AppStatus {
@@ -240,9 +260,23 @@ function settingsSnapshot(): Pick<ShellState, "drawerCollapsed" | "whatsappTheme
 function settingsPage(): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PrettyZap Settings</title>
 <style>
-:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0e1420;color:#e8edf5}*{box-sizing:border-box}html,body{height:100%}body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(1100px 560px at 85% -10%,#1c3044 0%,#101722 55%,#0e1420 100%)}main{flex:1;min-height:0;overflow-y:auto;width:min(100%,760px);margin:0 auto;padding:clamp(18px,4vw,36px) clamp(16px,4vw,34px) 14px}main::-webkit-scrollbar{width:10px}main::-webkit-scrollbar-track{background:transparent}main::-webkit-scrollbar-thumb{background:#2b3b50;border-radius:6px;border:2px solid transparent;background-clip:content-box}main::-webkit-scrollbar-thumb:hover{background:#3d5270;border:2px solid transparent;background-clip:content-box}h1{font-size:clamp(24px,5vw,30px);margin:0 0 6px;letter-spacing:-.01em}p{color:#8fa0b8;margin:0 0 26px;line-height:1.5;max-width:60ch}.card{background:linear-gradient(180deg,#16202e,#141d2a);border:1px solid #263448;border-radius:14px;padding:clamp(16px,3vw,24px);margin:16px 0;box-shadow:0 12px 32px rgba(4,10,20,.35)}h2{font-size:13px;margin:0 0 18px;color:#79d5b0;letter-spacing:.12em;text-transform:uppercase;font-weight:600}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}label{display:grid;min-width:0;gap:8px;color:#c6d0dc;font-size:13px}input{width:100%;min-width:0;border:1px solid #2c3c52;border-radius:8px;background:#0d1520;color:#f2f6fa;padding:11px 12px;font:inherit;transition:border-color .15s ease,box-shadow .15s ease}input:hover{border-color:#4a6079}input:focus{outline:none;border-color:#79d5b0;box-shadow:0 0 0 3px rgba(121,213,176,.18)}.check{display:flex;grid-template-columns:none;align-items:center;gap:12px;margin:14px 0}.check input{width:auto;accent-color:#79d5b0}.hint{font-size:12px;color:#77879d;margin:10px 0 0;line-height:1.5}.actions{flex:none;display:flex;align-items:center;gap:16px;border-top:1px solid #22303f;background:rgba(14,20,32,.88);backdrop-filter:blur(14px);padding:14px clamp(16px,4vw,34px)}#status{flex:1;min-width:0;max-width:460px;min-height:36px;display:flex;align-items:center;padding:8px 12px;border-radius:8px;font-size:12px}#status.success{color:#a5f0d0;background:#173b35;border:1px solid #286b5d}#status.error{color:#ffb7b7;background:#45252b;border:1px solid #85434d}.buttons{display:flex;gap:10px;flex:none}button{border:1px solid #33455c;border-radius:9px;padding:10px 18px;background:#1c2b3e;color:#dce7f1;font:inherit;font-weight:500;cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .08s ease}button:hover{background:#27394f;border-color:#5e7893}button:focus-visible{outline:2px solid #79d5b0;outline-offset:2px}button:active{transform:translateY(1px)}button.primary{background:#79d5b0;border-color:#79d5b0;color:#0f241e;font-weight:600;box-shadow:0 2px 10px rgba(121,213,176,.25)}button.primary:hover{background:#8fe2bf;border-color:#8fe2bf}button.primary:active{background:#62bd9a;box-shadow:none}button:disabled{cursor:wait;opacity:.65}@media(max-width:560px){.grid{grid-template-columns:1fr}.buttons button{flex:1}.card{margin:12px 0}}
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0e1420;color:#e8edf5}*{box-sizing:border-box}html,body{height:100%}body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(1100px 560px at 85% -10%,#1c3044 0%,#101722 55%,#0e1420 100%)}main{flex:1;min-height:0;overflow-y:auto;width:min(100%,760px);margin:0 auto;padding:clamp(18px,4vw,36px) clamp(16px,4vw,34px) 14px}main::-webkit-scrollbar{width:10px}main::-webkit-scrollbar-track{background:transparent}main::-webkit-scrollbar-thumb{background:#2b3b50;border-radius:6px;border:2px solid transparent;background-clip:content-box}main::-webkit-scrollbar-thumb:hover{background:#3d5270;border:2px solid transparent;background-clip:content-box}h1{font-size:clamp(24px,5vw,30px);margin:0 0 6px;letter-spacing:-.01em}p{color:#8fa0b8;margin:0 0 26px;line-height:1.5;max-width:60ch}.card{background:linear-gradient(180deg,#16202e,#141d2a);border:1px solid #263448;border-radius:14px;padding:clamp(16px,3vw,24px);margin:16px 0;box-shadow:0 12px 32px rgba(4,10,20,.35)}h2{font-size:13px;margin:0 0 18px;color:#79d5b0;letter-spacing:.12em;text-transform:uppercase;font-weight:600}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}label{display:grid;min-width:0;gap:8px;color:#c6d0dc;font-size:13px}input{width:100%;min-width:0;border:1px solid #2c3c52;border-radius:8px;background:#0d1520;color:#f2f6fa;padding:11px 12px;font:inherit;transition:border-color .15s ease,box-shadow .15s ease}input:hover{border-color:#4a6079}input:focus{outline:none;border-color:#79d5b0;box-shadow:0 0 0 3px rgba(121,213,176,.18)}.check{display:flex;grid-template-columns:none;align-items:center;gap:12px;margin:14px 0}.check input{width:auto;accent-color:#79d5b0}.hint{font-size:12px;color:#77879d;margin:10px 0 0;line-height:1.5}.actions{flex:none;display:flex;align-items:center;gap:16px;border-top:1px solid #22303f;background:rgba(14,20,32,.88);backdrop-filter:blur(14px);padding:14px clamp(16px,4vw,34px)}#status{flex:1;min-width:0;max-width:460px;min-height:36px;display:flex;align-items:center;padding:8px 12px;border-radius:8px;font-size:12px}#status.success{color:#a5f0d0;background:#173b35;border:1px solid #286b5d}#status.error{color:#ffb7b7;background:#45252b;border:1px solid #85434d}.buttons{display:flex;gap:10px;flex:none}button{border:1px solid #33455c;border-radius:9px;padding:10px 18px;background:#1c2b3e;color:#dce7f1;font:inherit;font-weight:500;cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .08s ease}button:hover{background:#27394f;border-color:#5e7893}button:focus-visible{outline:2px solid #79d5b0;outline-offset:2px}button:active{transform:translateY(1px)}button.primary{background:#79d5b0;border-color:#79d5b0;color:#0f241e;font-weight:600;box-shadow:0 2px 10px rgba(121,213,176,.25)}button.primary:hover{background:#8fe2bf;border-color:#8fe2bf}button.primary:active{background:#62bd9a;box-shadow:none}button:disabled{cursor:wait;opacity:.65}.color-row{display:flex;align-items:center;gap:8px;min-width:0}.color-row input[type="color"]{width:44px;height:36px;padding:3px;flex:none;cursor:pointer;border-radius:8px}.color-row input[type="text"]{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;text-transform:lowercase}select{width:100%;min-width:0;border:1px solid #2c3c52;border-radius:8px;background:#0d1520;color:#f2f6fa;padding:11px 12px;font:inherit;transition:border-color .15s ease,box-shadow .15s ease}select:hover{border-color:#4a6079}select:focus{outline:none;border-color:#79d5b0;box-shadow:0 0 0 3px rgba(121,213,176,.18)}select:disabled,input:disabled{opacity:.55;cursor:not-allowed}.inline-actions{display:flex;gap:10px;align-items:center;margin-top:16px}@media(max-width:560px){.grid{grid-template-columns:1fr}.buttons button{flex:1}.card{margin:12px 0}}
 </style></head><body><main><h1>PrettyZap Settings</h1><p>Customize shortcuts and the way PrettyZap behaves around WhatsApp Web.</p>
 <section class="card"><h2>Appearance</h2><label class="check"><input id="systemTheme" type="checkbox"> Apply the system theme to WhatsApp</label><div class="hint">When disabled, WhatsApp keeps its own appearance. Changes apply immediately.</div></section>
+<section class="card" id="colors-card"><h2>Colors</h2><div class="hint" id="colorsNote"></div><div class="grid">
+<label>Mode<select id="paletteMode"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+<label>Background<span class="color-row"><input type="color" data-color-key="background" value="#121212"><input type="text" data-color-hex="background" value="#121212" spellcheck="false" autocomplete="off"></span></label>
+<label>Dark background<span class="color-row"><input type="color" data-color-key="darkBackground" value="#0d0d0d"><input type="text" data-color-hex="darkBackground" value="#0d0d0d" spellcheck="false" autocomplete="off"></span></label>
+<label>Darker background<span class="color-row"><input type="color" data-color-key="darkerBackground" value="#090909"><input type="text" data-color-hex="darkerBackground" value="#090909" spellcheck="false" autocomplete="off"></span></label>
+<label>Foreground<span class="color-row"><input type="color" data-color-key="foreground" value="#bebebe"><input type="text" data-color-hex="foreground" value="#bebebe" spellcheck="false" autocomplete="off"></span></label>
+<label>Muted<span class="color-row"><input type="color" data-color-key="muted" value="#333333"><input type="text" data-color-hex="muted" value="#333333" spellcheck="false" autocomplete="off"></span></label>
+<label>Accent<span class="color-row"><input type="color" data-color-key="accent" value="#e68e0d"><input type="text" data-color-hex="accent" value="#e68e0d" spellcheck="false" autocomplete="off"></span></label>
+<label>Selection<span class="color-row"><input type="color" data-color-key="selection" value="#2a2a2a"><input type="text" data-color-hex="selection" value="#2a2a2a" spellcheck="false" autocomplete="off"></span></label>
+<label>Red<span class="color-row"><input type="color" data-color-key="red" value="#d35f5f"><input type="text" data-color-hex="red" value="#d35f5f" spellcheck="false" autocomplete="off"></span></label>
+<label>Yellow<span class="color-row"><input type="color" data-color-key="yellow" value="#b91c1c"><input type="text" data-color-hex="yellow" value="#b91c1c" spellcheck="false" autocomplete="off"></span></label>
+<label>Green<span class="color-row"><input type="color" data-color-key="green" value="#ffc107"><input type="text" data-color-hex="green" value="#ffc107" spellcheck="false" autocomplete="off"></span></label>
+<label>Blue<span class="color-row"><input type="color" data-color-key="blue" value="#e68e0d"><input type="text" data-color-hex="blue" value="#e68e0d" spellcheck="false" autocomplete="off"></span></label>
+</div><div class="inline-actions"><button id="resetColors">Reset to defaults</button><span class="hint" style="margin:0">Changes apply to WhatsApp immediately.</span></div></section>
 <section class="card"><h2>Behavior</h2><label class="check"><input id="drawerCollapsed" type="checkbox"> Start the chat drawer collapsed</label><div class="hint">This takes effect the next time the app opens.</div></section>
 <section class="card"><h2>Shortcuts</h2><div class="grid">
 <label>Toggle drawer<input type="text" data-key="toggleDrawer" autocomplete="off"></label><label>Focus chat search<input type="text" data-key="search" autocomplete="off"></label>
@@ -255,10 +289,25 @@ function settingsPage(): string {
 <label>Tab 7<input type="text" data-key="navigation.7" autocomplete="off"></label><label>Tab 8<input type="text" data-key="navigation.8" autocomplete="off"></label>
 </div><div class="hint">Click a shortcut field, then press the desired combination. For example: Ctrl+Shift+A, Ctrl+1, or Cmd+K.</div></section>
 </main><footer class="actions"><div id="status" role="status" aria-live="polite"></div><div class="buttons"><button id="cancel">Close</button><button class="primary" id="save">Save settings</button></div></footer>
-<script>const api=window.prettyZapSettings;const fields=[...document.querySelectorAll('[data-key]')];const read=(shortcuts,key)=>key.split('.').reduce((value,part)=>value?.[part],shortcuts);const setStatus=(message,type)=>{status.textContent=message;status.className=type};const collect=()=>{const shortcuts={};fields.forEach(e=>{const parts=e.dataset.key.split('.');if(parts.length===1)shortcuts[parts[0]]=e.value.trim();else{shortcuts[parts[0]]??={};shortcuts[parts[0]][parts[1]]=e.value.trim()}});return shortcuts};const prettyKey=e=>{if(e.key===' ')return 'Space';if(e.key==='Escape')return 'Escape';if(e.key==='Enter')return 'Enter';if(e.key.length===1)return e.key.toUpperCase();return e.key};fields.forEach(field=>field.addEventListener('keydown',e=>{if(['Tab','Shift','Control','Alt','Meta'].includes(e.key))return;e.preventDefault();const parts=[];if(e.ctrlKey)parts.push('Ctrl');if(e.metaKey)parts.push('Cmd');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');parts.push(prettyKey(e));field.value=parts.join('+')}));api.get().then(s=>{fields.forEach(e=>e.value=read(s.shortcuts,e.dataset.key)||'');systemTheme.checked=s.whatsappTheme==='system';drawerCollapsed.checked=s.drawerCollapsed}).catch(()=>setStatus('Unable to load settings','error'));save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';setStatus('Applying changes…','success');try{const saved=await api.update({shortcuts:collect(),whatsappTheme:systemTheme.checked?'system':'whatsapp',drawerCollapsed:drawerCollapsed.checked});fields.forEach(e=>e.value=read(saved.shortcuts,e.dataset.key)||'');setStatus('✓ Settings saved and applied','success')}catch(error){setStatus('Could not save settings','error')}finally{save.disabled=false;save.textContent='Save settings'}};cancel.onclick=()=>api.close();</script></body></html>`;
+<script>const api=window.prettyZapSettings;const fields=[...document.querySelectorAll('[data-key]')];const read=(shortcuts,key)=>key.split('.').reduce((value,part)=>value?.[part],shortcuts);const setStatus=(message,type)=>{status.textContent=message;status.className=type};const collect=()=>{const shortcuts={};fields.forEach(e=>{const parts=e.dataset.key.split('.');if(parts.length===1)shortcuts[parts[0]]=e.value.trim();else{shortcuts[parts[0]]??={};shortcuts[parts[0]][parts[1]]=e.value.trim()}});return shortcuts};const prettyKey=e=>{if(e.key===' ')return 'Space';if(e.key==='Escape')return 'Escape';if(e.key==='Enter')return 'Enter';if(e.key.length===1)return e.key.toUpperCase();return e.key};fields.forEach(field=>field.addEventListener('keydown',e=>{if(['Tab','Shift','Control','Alt','Meta'].includes(e.key))return;e.preventDefault();const parts=[];if(e.ctrlKey)parts.push('Ctrl');if(e.metaKey)parts.push('Cmd');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');parts.push(prettyKey(e));field.value=parts.join('+')}));api.get().then(s=>{fields.forEach(e=>e.value=read(s.shortcuts,e.dataset.key)||'');systemTheme.checked=s.whatsappTheme==='system';drawerCollapsed.checked=s.drawerCollapsed}).catch(()=>setStatus('Unable to load settings','error'));save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';setStatus('Applying changes…','success');try{const saved=await api.update({shortcuts:collect(),whatsappTheme:systemTheme.checked?'system':'whatsapp',drawerCollapsed:drawerCollapsed.checked});fields.forEach(e=>e.value=read(saved.shortcuts,e.dataset.key)||'');setStatus('✓ Settings saved and applied','success')}catch(error){setStatus('Could not save settings','error')}finally{save.disabled=false;save.textContent='Save settings'}};cancel.onclick=()=>api.close();
+const colorFields=[...document.querySelectorAll('[data-color-key]')];
+const hexFields=[...document.querySelectorAll('[data-color-hex]')];
+const modeSelect=document.getElementById('paletteMode');
+const colorsNote=document.getElementById('colorsNote');
+const resetColors=document.getElementById('resetColors');
+let colorsEditable=true;let paletteModeValue='dark';let paletteColors={};let paletteSaveTimer;
+const setColorsEditable=(editable)=>{colorsEditable=editable;modeSelect.disabled=!editable;colorFields.forEach(f=>f.disabled=!editable);hexFields.forEach(f=>f.disabled=!editable);resetColors.disabled=!editable};
+const applyPalette=(p)=>{paletteModeValue=p.mode;paletteColors={...p.colors};modeSelect.value=p.mode;colorFields.forEach(f=>{const v=paletteColors[f.dataset.colorKey]||'#000000';f.value=v;const hex=hexFields.find(h=>h.dataset.colorHex===f.dataset.colorKey);if(hex)hex.value=v.toLowerCase()})};
+const refreshAppearanceCheckbox=()=>api.get().then(s=>{systemTheme.checked=s.whatsappTheme==='system'}).catch(()=>{});
+const pushPalette=()=>{clearTimeout(paletteSaveTimer);paletteSaveTimer=setTimeout(()=>{api.setPalette({mode:paletteModeValue,colors:paletteColors}).then(p=>{applyPalette(p);setStatus('Colors saved and applied','success');return refreshAppearanceCheckbox()}).catch(()=>setStatus('Could not save colors','error'))},300)};
+colorFields.forEach(f=>f.addEventListener('input',()=>{const v=f.value.toLowerCase();paletteColors[f.dataset.colorKey]=v;const hex=hexFields.find(h=>h.dataset.colorHex===f.dataset.colorKey);if(hex)hex.value=v;pushPalette()}));
+hexFields.forEach(h=>h.addEventListener('change',()=>{const v=h.value.trim().toLowerCase();if(!/^#[0-9a-f]{6}$/.test(v)){h.value=(paletteColors[h.dataset.colorHex]||'').toLowerCase();setStatus('Enter a color like #1a1b26','error');return}paletteColors[h.dataset.colorHex]=v;const cf=colorFields.find(f=>f.dataset.colorKey===h.dataset.colorHex);if(cf)cf.value=v;pushPalette()}));
+modeSelect.addEventListener('change',()=>{paletteModeValue=modeSelect.value;pushPalette()});
+resetColors.addEventListener('click',()=>{resetColors.disabled=true;api.resetPalette().then(p=>{applyPalette(p);setStatus('Colors reset','success');return refreshAppearanceCheckbox()}).catch(()=>setStatus('Could not reset colors','error')).finally(()=>{resetColors.disabled=!colorsEditable})});
+api.getPalette().then(p=>{setColorsEditable(p.kind!=='omarchy');colorsNote.textContent=p.kind==='omarchy'?'Colors follow your active Omarchy theme (read-only).':'Custom colors — used by the System theme on this device. Omarchy is not required.';applyPalette(p)}).catch(()=>{colorsNote.textContent='Unable to load colors.';setColorsEditable(false)});</script></body></html>`;
 }
 
-function openSettings(): void {
+function openSettings(focus?: "colors"): void {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.show();
     settingsWindow.focus();
@@ -280,17 +329,29 @@ function openSettings(): void {
     },
   });
   settingsWindow.on("closed", () => { settingsWindow = undefined; });
-  void settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(settingsPage())}`);
+  const loaded = settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(settingsPage())}`);
+  if (focus === "colors") {
+    void loaded.then(() => {
+      const window = settingsWindow;
+      if (!window || window.isDestroyed()) return;
+      void window.webContents.executeJavaScript(
+        `document.getElementById("colors-card")?.scrollIntoView({ block: "start" })`,
+      ).catch((error: unknown) => {
+        console.warn("Unable to focus PrettyZap colors section", error);
+      });
+    });
+  }
 }
 
 function createTray(): void {
-  if (runningUnderOmarchy()) return;
+  if (isRunningUnderOmarchy()) return;
   try {
     tray = new Tray(TRAY_ICON);
     tray.setToolTip("PrettyZap");
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Show PrettyZap", click: showWindow },
-      { label: "Settings", click: openSettings },
+      { label: "Settings", click: () => openSettings() },
+      { label: "Colors…", click: () => openSettings("colors") },
       { type: "separator" },
       {
         label: "Restart PrettyZap",
@@ -565,7 +626,6 @@ function createWindow(): void {
     title: "PrettyZap",
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, "../preload/index.js"),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -585,11 +645,27 @@ function createWindow(): void {
   prettyZapWindow = window;
   whatsappWebContents = whatsappView.webContents;
   const whatsappSession = session.fromPartition(WHATSAPP_PARTITION);
+  // WhatsApp Web is remote, untrusted content. Grant only the permissions its
+  // actual features need (notifications are user-gated); deny everything else
+  // so a compromised page cannot reach geolocation, USB/HID/serial, MIDI,
+  // screen capture, or the system clipboard reader.
+  const grantedPermissions = new Set<string>([
+    "media", // voice/video calls
+    "fullscreen", // video playback
+    "clipboard-sanitized-write", // native paste button
+  ]);
+  const allowedPermission = (permission: string): boolean =>
+    permission === "notifications"
+      ? shellState.notificationsEnabled
+      : grantedPermissions.has(permission);
   whatsappSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === "notifications" ? shellState.notificationsEnabled : true);
+    if (!allowedPermission(permission)) {
+      console.warn("PrettyZap denied WhatsApp Web permission request", permission);
+    }
+    callback(allowedPermission(permission));
   });
   whatsappSession.setPermissionCheckHandler((_webContents, permission) => {
-    return permission === "notifications" ? shellState.notificationsEnabled : true;
+    return allowedPermission(permission);
   });
   let rendererRecoveryAttempts = 0;
   let rendererRecoveryResetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -735,6 +811,32 @@ ipcMain.on(SETTINGS_CLOSE_CHANNEL, (event) => {
   if (settingsWindow && !settingsWindow.isDestroyed() && event.sender.id === settingsWindow.webContents.id) {
     settingsWindow.close();
   }
+});
+
+ipcMain.handle(PALETTE_GET_CHANNEL, (event) => {
+  if (!isSettingsSender(event)) return null;
+  return paletteSnapshot();
+});
+
+ipcMain.handle(PALETTE_SET_CHANNEL, (event, value: unknown) => {
+  if (!isSettingsSender(event)) return null;
+  const palette = recordToPalette(value);
+  if (!palette) return paletteSnapshot();
+  writePrettyZapPalette(palette);
+  whatsappThemeController?.refreshPalette();
+  // Saving colors implies the user wants to see them: switch the System
+  // theme on when it was left on WhatsApp's own appearance.
+  if (whatsappThemeController?.getMode() !== "system") {
+    whatsappThemeController?.setMode("system");
+  }
+  return paletteSnapshot();
+});
+
+ipcMain.handle(PALETTE_RESET_CHANNEL, (event) => {
+  if (!isSettingsSender(event)) return null;
+  removePrettyZapPalette();
+  whatsappThemeController?.refreshPalette();
+  return paletteSnapshot();
 });
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
