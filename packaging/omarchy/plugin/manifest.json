@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "prettyletto.prettyzap",
+  "name": "PrettyZap",
+  "version": "0.1.0",
+  "author": "PrettyZap",
+  "license": "MIT",
+  "description": "PrettyZap side widget: open, hide, and theme the WhatsApp Web desktop shell from the Omarchy bar.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "PrettyZap",
+    "description": "A bar icon with a popup panel to open, hide, open settings, and toggle the theme of PrettyZap.",
+    "category": "Messaging",
+    "aliases": ["whatsapp", "pz"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "launchCommand": "uwsm-app -- prettyzap",
+      "icon": "brand"
+    },
+    "schema": [
+      {
+        "key": "launchCommand",
+        "type": "string",
+        "label": "Launch command",
+        "description": "How PrettyZap is launched. Split on spaces; append driver flags is handled by the widget.",
+        "defaultValue": "uwsm-app -- prettyzap"
+      },
+      {
+        "key": "icon",
+        "type": "string",
+        "label": "Icon style",
+        "description": "brand (PrettyZap logo) or glyph (WhatsApp symbol).",
+        "defaultValue": "brand"
+      }
+    ]
+  }
+}

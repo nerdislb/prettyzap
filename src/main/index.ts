@@ -10,12 +10,26 @@ import {
   shell,
   WebContentsView,
 } from "electron";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { installWhatsAppDrawer } from "../features/whatsapp-drawer";
 import { installWhatsAppTheme } from "../features/whatsapp-theme";
 import type { WhatsAppThemeController } from "../features/whatsapp-theme";
 import { focusActiveComposer } from "../features/whatsapp-focus";
-import { loadShellState, saveShellState, type ShellState } from "./shell-state";
+import {
+  loadShellState,
+  normalizeShortcutPreferences,
+  saveShellState,
+  type ShellState,
+  type ShortcutPreferences,
+} from "./shell-state";
+import {
+  clearStatus,
+  writeStatus,
+  type AppStatus,
+  type PrettyZapTheme,
+} from "./status";
+import { startDesktopControl, type DesktopControl } from "./desktop-control";
 
 app.setName("PrettyZap");
 
@@ -53,7 +67,72 @@ function openExternalUrl(url: string): void {
 }
 const SHOW_HIDE_ACCELERATOR = "CommandOrControl+Shift+Space";
 const TOGGLE_ARGUMENT = "--toggle";
+const SHOW_ARGUMENT = "--show";
+const HIDE_ARGUMENT = "--hide";
+const SETTINGS_ARGUMENT = "--settings";
+const QUIT_ARGUMENT = "--quit";
+const THEME_ARGUMENT = "--theme";
+
+type ThemeArgument = PrettyZapTheme | "toggle";
+
+interface CliAction {
+  toggle?: boolean;
+  show?: boolean;
+  hide?: boolean;
+  settings?: boolean;
+  quit?: boolean;
+  theme?: ThemeArgument;
+}
+
+// Parse the command line for the Omarchy widget's driver flags. Unknown and
+// positional args are ignored so `prettyzap file.pdf`-style invocations keep
+// working. `--theme` consumes the next token as its value.
+function parseCliArgs(args: readonly string[]): CliAction {
+  const action: CliAction = {};
+  for (let i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case TOGGLE_ARGUMENT:
+        action.toggle = true;
+        break;
+      case SHOW_ARGUMENT:
+        action.show = true;
+        break;
+      case HIDE_ARGUMENT:
+        action.hide = true;
+        break;
+      case SETTINGS_ARGUMENT:
+        action.settings = true;
+        break;
+      case QUIT_ARGUMENT:
+        action.quit = true;
+        break;
+      case THEME_ARGUMENT: {
+        const value = args[i + 1];
+        if (value === "whatsapp" || value === "system" || value === "toggle") {
+          action.theme = value;
+          i += 1;
+        }
+        break;
+      }
+      default:
+        // Chromium only preserves switch values in the `--theme=<value>` form;
+        // the two-token `--theme <value>` arrives detached and reordered.
+        if (args[i].startsWith("--theme=")) {
+          const value = args[i].slice("--theme=".length);
+          if (value === "whatsapp" || value === "system" || value === "toggle") {
+            action.theme = value;
+          }
+        }
+        break;
+    }
+  }
+  return action;
+}
 const DRAWER_STATE_CHANNEL = "prettyzap:drawer-state";
+const SETTINGS_GET_CHANNEL = "prettyzap:settings-get";
+const SETTINGS_UPDATE_CHANNEL = "prettyzap:settings-update";
+const SETTINGS_CLOSE_CHANNEL = "prettyzap:settings-close";
+const MEMORY_RECOVERY_TIMEOUT_MS = 30_000;
 const TRAY_ICON = nativeImage.createFromDataURL(
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAIAAADAAbR1AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRP///////wlY99wAAAAHdElNRQfqCBAAKTh3JqlvAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA4LTE2VDAwOjQxOjU2KzAwOjAw19CgsgAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOC0xNlQwMDo0MTo1NiswMDowMKaNGA4AAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDgtMTZUMDA6NDE6NTYrMDA6MDDxmDnRAAAAYklEQVQ4y2NkYFixoqWFgWaAiXZG08kCFmIU/f8fHl5djSkuyLhertf2A8Ov7h8eFFkAMQhTHL/RBCxAc3U4QzV+g3D5ZuhH8qgFBAHOVIQraeICuJIsC6kaSAVDPw5obgEALmsjxWv//f0AAAAASUVORK5CYII=",
 );
@@ -68,6 +147,31 @@ let shellState = loadShellState();
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let whatsappThemeController: WhatsAppThemeController | undefined;
 let whatsappThemeMenuItems: { whatsapp?: Electron.MenuItem; system?: Electron.MenuItem } = {};
+let settingsWindow: BrowserWindow | undefined;
+let removeDrawerFeature: (() => void) | undefined;
+let recoverMemoryMenuItem: Electron.MenuItem | undefined;
+let recoveringMemory = false;
+let desktopControl: DesktopControl | undefined;
+let appReady = false;
+
+function runningUnderOmarchy(): boolean {
+  if (process.env.PRETTYZAP_FORCE_TRAY === "1") return false;
+  if (process.env.PRETTYZAP_DISABLE_TRAY === "1") return true;
+  return Boolean(process.env.OMARCHY_PATH)
+    || Boolean(process.env.OMARCHY_VERSION)
+    || fs.existsSync(path.join(app.getPath("home"), ".config/omarchy/shell.json"));
+}
+
+function publishStatus(): AppStatus {
+  const mode = whatsappThemeController?.getMode() ?? shellState.whatsappTheme;
+  const status = writeStatus(
+    mode,
+    Boolean(prettyZapWindow && !prettyZapWindow.isDestroyed() && prettyZapWindow.isVisible()),
+    appReady,
+  );
+  desktopControl?.publish(status);
+  return status;
+}
 
 function persistShellState(): void {
   if (saveTimer) clearTimeout(saveTimer);
@@ -96,12 +200,74 @@ function showWindow(): void {
   restoreAndFocusPrettyZapWindow();
 }
 
+function quitPrettyZap(): void {
+  isQuitting = true;
+  persistShellState();
+  app.quit();
+}
+
+function settingsSnapshot(): Pick<ShellState, "drawerCollapsed" | "whatsappTheme" | "shortcuts"> {
+  return {
+    drawerCollapsed: shellState.drawerCollapsed,
+    whatsappTheme: shellState.whatsappTheme,
+    shortcuts: { ...shellState.shortcuts },
+  };
+}
+
+function settingsPage(): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PrettyZap Settings</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0e1420;color:#e8edf5}*{box-sizing:border-box}html,body{height:100%}body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(1100px 560px at 85% -10%,#1c3044 0%,#101722 55%,#0e1420 100%)}main{flex:1;min-height:0;overflow-y:auto;width:min(100%,760px);margin:0 auto;padding:clamp(18px,4vw,36px) clamp(16px,4vw,34px) 14px}main::-webkit-scrollbar{width:10px}main::-webkit-scrollbar-track{background:transparent}main::-webkit-scrollbar-thumb{background:#2b3b50;border-radius:6px;border:2px solid transparent;background-clip:content-box}main::-webkit-scrollbar-thumb:hover{background:#3d5270;border:2px solid transparent;background-clip:content-box}h1{font-size:clamp(24px,5vw,30px);margin:0 0 6px;letter-spacing:-.01em}p{color:#8fa0b8;margin:0 0 26px;line-height:1.5;max-width:60ch}.card{background:linear-gradient(180deg,#16202e,#141d2a);border:1px solid #263448;border-radius:14px;padding:clamp(16px,3vw,24px);margin:16px 0;box-shadow:0 12px 32px rgba(4,10,20,.35)}h2{font-size:13px;margin:0 0 18px;color:#79d5b0;letter-spacing:.12em;text-transform:uppercase;font-weight:600}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}label{display:grid;min-width:0;gap:8px;color:#c6d0dc;font-size:13px}input{width:100%;min-width:0;border:1px solid #2c3c52;border-radius:8px;background:#0d1520;color:#f2f6fa;padding:11px 12px;font:inherit;transition:border-color .15s ease,box-shadow .15s ease}input:hover{border-color:#4a6079}input:focus{outline:none;border-color:#79d5b0;box-shadow:0 0 0 3px rgba(121,213,176,.18)}.check{display:flex;grid-template-columns:none;align-items:center;gap:12px;margin:14px 0}.check input{width:auto;accent-color:#79d5b0}.hint{font-size:12px;color:#77879d;margin:10px 0 0;line-height:1.5}.actions{flex:none;display:flex;align-items:center;gap:16px;border-top:1px solid #22303f;background:rgba(14,20,32,.88);backdrop-filter:blur(14px);padding:14px clamp(16px,4vw,34px)}#status{flex:1;min-width:0;max-width:460px;min-height:36px;display:flex;align-items:center;padding:8px 12px;border-radius:8px;font-size:12px}#status.success{color:#a5f0d0;background:#173b35;border:1px solid #286b5d}#status.error{color:#ffb7b7;background:#45252b;border:1px solid #85434d}.buttons{display:flex;gap:10px;flex:none}button{border:1px solid #33455c;border-radius:9px;padding:10px 18px;background:#1c2b3e;color:#dce7f1;font:inherit;font-weight:500;cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .08s ease}button:hover{background:#27394f;border-color:#5e7893}button:focus-visible{outline:2px solid #79d5b0;outline-offset:2px}button:active{transform:translateY(1px)}button.primary{background:#79d5b0;border-color:#79d5b0;color:#0f241e;font-weight:600;box-shadow:0 2px 10px rgba(121,213,176,.25)}button.primary:hover{background:#8fe2bf;border-color:#8fe2bf}button.primary:active{background:#62bd9a;box-shadow:none}button:disabled{cursor:wait;opacity:.65}@media(max-width:560px){.grid{grid-template-columns:1fr}.buttons button{flex:1}.card{margin:12px 0}}
+</style></head><body><main><h1>PrettyZap Settings</h1><p>Customize shortcuts and the way PrettyZap behaves around WhatsApp Web.</p>
+<section class="card"><h2>Appearance</h2><label class="check"><input id="systemTheme" type="checkbox"> Apply the system theme to WhatsApp</label><div class="hint">When disabled, WhatsApp keeps its own appearance. Changes apply immediately.</div></section>
+<section class="card"><h2>Behavior</h2><label class="check"><input id="drawerCollapsed" type="checkbox"> Start the chat drawer collapsed</label><div class="hint">This takes effect the next time the app opens.</div></section>
+<section class="card"><h2>Shortcuts</h2><div class="grid">
+<label>Toggle drawer<input type="text" data-key="toggleDrawer" autocomplete="off"></label><label>Focus chat search<input type="text" data-key="search" autocomplete="off"></label>
+<label>Open Archived<input type="text" data-key="openArchived" autocomplete="off"></label><label>Focus composer<input type="text" data-key="focusComposer" autocomplete="off"></label>
+<label>Scroll down<input type="text" data-key="scrollDown" autocomplete="off"></label><label>Scroll up<input type="text" data-key="scrollUp" autocomplete="off"></label>
+<label>Next chat<input type="text" data-key="cycleForward" autocomplete="off"></label><label>Previous chat<input type="text" data-key="cycleBackward" autocomplete="off"></label>
+<label>Tab 1<input type="text" data-key="navigation.1" autocomplete="off"></label><label>Tab 2<input type="text" data-key="navigation.2" autocomplete="off"></label>
+<label>Tab 3<input type="text" data-key="navigation.3" autocomplete="off"></label><label>Tab 4<input type="text" data-key="navigation.4" autocomplete="off"></label>
+<label>Tab 5<input type="text" data-key="navigation.5" autocomplete="off"></label><label>Tab 6<input type="text" data-key="navigation.6" autocomplete="off"></label>
+<label>Tab 7<input type="text" data-key="navigation.7" autocomplete="off"></label><label>Tab 8<input type="text" data-key="navigation.8" autocomplete="off"></label>
+</div><div class="hint">Click a shortcut field, then press the desired combination. For example: Ctrl+Shift+A, Ctrl+1, or Cmd+K.</div></section>
+</main><footer class="actions"><div id="status" role="status" aria-live="polite"></div><div class="buttons"><button id="cancel">Close</button><button class="primary" id="save">Save settings</button></div></footer>
+<script>const api=window.prettyZapSettings;const fields=[...document.querySelectorAll('[data-key]')];const read=(shortcuts,key)=>key.split('.').reduce((value,part)=>value?.[part],shortcuts);const setStatus=(message,type)=>{status.textContent=message;status.className=type};const collect=()=>{const shortcuts={};fields.forEach(e=>{const parts=e.dataset.key.split('.');if(parts.length===1)shortcuts[parts[0]]=e.value.trim();else{shortcuts[parts[0]]??={};shortcuts[parts[0]][parts[1]]=e.value.trim()}});return shortcuts};const prettyKey=e=>{if(e.key===' ')return 'Space';if(e.key==='Escape')return 'Escape';if(e.key==='Enter')return 'Enter';if(e.key.length===1)return e.key.toUpperCase();return e.key};fields.forEach(field=>field.addEventListener('keydown',e=>{if(['Tab','Shift','Control','Alt','Meta'].includes(e.key))return;e.preventDefault();const parts=[];if(e.ctrlKey)parts.push('Ctrl');if(e.metaKey)parts.push('Cmd');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');parts.push(prettyKey(e));field.value=parts.join('+')}));api.get().then(s=>{fields.forEach(e=>e.value=read(s.shortcuts,e.dataset.key)||'');systemTheme.checked=s.whatsappTheme==='system';drawerCollapsed.checked=s.drawerCollapsed}).catch(()=>setStatus('Unable to load settings','error'));save.onclick=async()=>{save.disabled=true;save.textContent='Saving…';setStatus('Applying changes…','success');try{const saved=await api.update({shortcuts:collect(),whatsappTheme:systemTheme.checked?'system':'whatsapp',drawerCollapsed:drawerCollapsed.checked});fields.forEach(e=>e.value=read(saved.shortcuts,e.dataset.key)||'');setStatus('✓ Settings saved and applied','success')}catch(error){setStatus('Could not save settings','error')}finally{save.disabled=false;save.textContent='Save settings'}};cancel.onclick=()=>api.close();</script></body></html>`;
+}
+
+function openSettings(): void {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+  settingsWindow = new BrowserWindow({
+    width: 840,
+    height: 700,
+    minWidth: 560,
+    minHeight: 480,
+    title: "PrettyZap Settings",
+    parent: prettyZapWindow,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/settings.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  settingsWindow.on("closed", () => { settingsWindow = undefined; });
+  void settingsWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(settingsPage())}`);
+}
+
 function createTray(): void {
+  if (runningUnderOmarchy()) return;
   try {
     tray = new Tray(TRAY_ICON);
     tray.setToolTip("PrettyZap");
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Show PrettyZap", click: showWindow },
+      { label: "Settings", click: openSettings },
       { type: "separator" },
       {
         label: "Restart PrettyZap",
@@ -114,11 +280,7 @@ function createTray(): void {
       },
       {
         label: "Quit PrettyZap",
-        click: () => {
-          isQuitting = true;
-          persistShellState();
-          app.quit();
-        },
+        click: quitPrettyZap,
       },
     ]));
     tray.on("click", showWindow);
@@ -138,6 +300,7 @@ function restoreAndFocusPrettyZapWindow(): void {
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
+  publishStatus();
 }
 
 function togglePrettyZapWindow(): void {
@@ -149,12 +312,60 @@ function togglePrettyZapWindow(): void {
 
   if (window.isVisible()) {
     window.hide();
+    publishStatus();
     return;
   }
 
   restoreAndFocusPrettyZapWindow();
   const webContents = whatsappWebContents;
   if (webContents) void focusActiveComposer(webContents);
+}
+
+function hidePrettyZapWindow(): void {
+  const window = prettyZapWindow;
+  if (window && !window.isDestroyed() && window.isVisible()) {
+    window.hide();
+    publishStatus();
+  }
+}
+
+// Apply the widget's fire-and-forget driver flags. Order is deliberate:
+// theme and settings run first so they work even when the window action that
+// follows (re)shows the app; hide beats toggle/show; an explicit toggle wins
+// over show; settings/theme without a window flag imply "show the app".
+function applyCliAction(action: CliAction): void {
+  if (action.quit) {
+    quitPrettyZap();
+    return;
+  }
+
+  if (action.theme) {
+    const mode: PrettyZapTheme =
+      action.theme === "toggle"
+        ? whatsappThemeController?.getMode() === "system"
+          ? "whatsapp"
+          : "system"
+        : action.theme;
+    whatsappThemeController?.setMode(mode);
+  }
+
+  if (action.settings) {
+    const window = prettyZapWindow;
+    if (window && !window.isDestroyed() && !window.isVisible()) {
+      restoreAndFocusPrettyZapWindow();
+    }
+    openSettings();
+  }
+
+  if (action.hide) {
+    hidePrettyZapWindow();
+  } else if (action.toggle) {
+    togglePrettyZapWindow();
+  } else if (action.show) {
+    restoreAndFocusPrettyZapWindow();
+  } else if (action.settings || action.theme) {
+    restoreAndFocusPrettyZapWindow();
+  }
 }
 
 function updateWhatsAppThemeMenu(): void {
@@ -164,6 +375,54 @@ function updateWhatsAppThemeMenu(): void {
   if (whatsappThemeMenuItems.system) whatsappThemeMenuItems.system.checked = mode === "system";
 }
 
+async function reportWhatsAppMemory(label: string): Promise<void> {
+  const appMetrics = app.getAppMetrics().map((metric) => ({
+    pid: metric.pid,
+    type: metric.type,
+    memory: metric.memory,
+  }));
+  const whatsappPid = whatsappWebContents && !whatsappWebContents.isDestroyed()
+    ? whatsappWebContents.getProcessId()
+    : undefined;
+  const whatsappMemory = appMetrics.find((metric) => metric.pid === whatsappPid) ?? null;
+  console.info("PrettyZap memory", { label, appMetrics, whatsappMemory });
+}
+
+async function recoverWhatsAppMemory(): Promise<void> {
+  if (recoveringMemory || !whatsappWebContents || whatsappWebContents.isDestroyed()) return;
+
+  recoveringMemory = true;
+  if (recoverMemoryMenuItem) recoverMemoryMenuItem.enabled = false;
+  try {
+    await reportWhatsAppMemory("before-recovery");
+    const webContents = whatsappWebContents;
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        webContents.removeListener("did-finish-load", onFinishedLoad);
+        reject(new Error("WhatsApp reload timed out"));
+      }, MEMORY_RECOVERY_TIMEOUT_MS);
+      const onFinishedLoad = (): void => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      webContents.once("did-finish-load", onFinishedLoad);
+      try {
+        webContents.reload();
+      } catch (error: unknown) {
+        clearTimeout(timeout);
+        webContents.removeListener("did-finish-load", onFinishedLoad);
+        reject(error);
+      }
+    });
+    await reportWhatsAppMemory("after-recovery");
+  } catch (error: unknown) {
+    console.error("Unable to recover PrettyZap memory", error);
+  } finally {
+    recoveringMemory = false;
+    if (recoverMemoryMenuItem) recoverMemoryMenuItem.enabled = true;
+  }
+}
+
 function installApplicationMenu(): void {
   whatsappThemeMenuItems = {};
   const menu = Menu.buildFromTemplate([
@@ -171,6 +430,14 @@ function installApplicationMenu(): void {
       label: "View",
       submenu: [
         { role: "reload" },
+        { type: "separator" },
+        {
+          id: "prettyzap-recover-memory",
+          label: "Recover Memory",
+          click: () => {
+            void recoverWhatsAppMemory();
+          },
+        },
         { type: "separator" },
         {
           label: "Use WhatsApp appearance",
@@ -189,8 +456,13 @@ function installApplicationMenu(): void {
   ]);
   const view = menu.items[0]?.submenu;
   if (view) {
-    whatsappThemeMenuItems.whatsapp = view.items[2];
-    whatsappThemeMenuItems.system = view.items[3];
+    recoverMemoryMenuItem = view.getMenuItemById("prettyzap-recover-memory") ?? undefined;
+    whatsappThemeMenuItems.whatsapp = view.items.find(
+      (item) => item.label === "Use WhatsApp appearance",
+    );
+    whatsappThemeMenuItems.system = view.items.find(
+      (item) => item.label === "Use System palette",
+    );
   }
   Menu.setApplicationMenu(menu);
   updateWhatsAppThemeMenu();
@@ -217,6 +489,7 @@ function createWindow(): void {
     minWidth: 720,
     minHeight: 520,
     title: "PrettyZap",
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       nodeIntegration: false,
@@ -237,6 +510,8 @@ function createWindow(): void {
 
   prettyZapWindow = window;
   whatsappWebContents = whatsappView.webContents;
+  let rendererRecoveryAttempts = 0;
+  let rendererRecoveryResetTimer: ReturnType<typeof setTimeout> | undefined;
 
   whatsappView.webContents.setUserAgent(WHATSAPP_USER_AGENT);
   whatsappView.webContents.on("will-navigate", (event, url) => {
@@ -252,14 +527,34 @@ function createWindow(): void {
   whatsappView.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
     console.error("Unable to load WhatsApp Web", errorCode, errorDescription);
   });
+  whatsappView.webContents.on("did-finish-load", () => {
+    if (rendererRecoveryResetTimer) clearTimeout(rendererRecoveryResetTimer);
+    rendererRecoveryResetTimer = setTimeout(() => {
+      rendererRecoveryResetTimer = undefined;
+      rendererRecoveryAttempts = 0;
+    }, 60_000);
+  });
+  whatsappView.webContents.on("render-process-gone", (_event, details) => {
+    console.error("WhatsApp renderer process exited", details);
+    if (details.reason === "clean-exit" || rendererRecoveryAttempts >= 2) return;
+    rendererRecoveryAttempts += 1;
+    setTimeout(() => {
+      if (whatsappView.webContents.isDestroyed()) return;
+      try {
+        whatsappView.webContents.reload();
+      } catch (error: unknown) {
+        console.error("Unable to reload WhatsApp after renderer failure", error);
+      }
+    }, 1_000);
+  });
 
   window.contentView.addChildView(whatsappView);
   layoutWhatsAppView(window, whatsappView);
 
-  const removeDrawerFeature =
+  removeDrawerFeature =
     process.env.PRETTYZAP_DISABLE_DRAWER === "1"
       ? () => undefined
-      : installWhatsAppDrawer(whatsappView.webContents, shellState.drawerCollapsed);
+      : installWhatsAppDrawer(whatsappView.webContents, shellState.drawerCollapsed, shellState.shortcuts);
 
   const themeController = installWhatsAppTheme(
     whatsappView.webContents,
@@ -268,6 +563,7 @@ function createWindow(): void {
       shellState.whatsappTheme = mode;
       scheduleShellStateSave();
       updateWhatsAppThemeMenu();
+      publishStatus();
     },
   );
   whatsappThemeController = themeController;
@@ -284,15 +580,18 @@ function createWindow(): void {
   window.on("maximize", () => updateWindowState(window));
   window.on("unmaximize", () => updateWindowState(window));
   window.on("close", (event) => {
-    if (!isQuitting && tray) {
+    if (!isQuitting) {
       event.preventDefault();
       window.hide();
+      publishStatus();
       return;
     }
     persistShellState();
   });
   window.on("closed", () => {
-    removeDrawerFeature();
+    if (rendererRecoveryResetTimer) clearTimeout(rendererRecoveryResetTimer);
+    removeDrawerFeature?.();
+    removeDrawerFeature = undefined;
     themeController?.dispose();
     if (whatsappThemeController === themeController) whatsappThemeController = undefined;
     if (prettyZapWindow === window) prettyZapWindow = undefined;
@@ -303,6 +602,10 @@ function createWindow(): void {
       whatsappView.webContents.close();
     }
   });
+  window.on("ready-to-show", () => {
+    appReady = true;
+    publishStatus();
+  });
 }
 
 ipcMain.on(DRAWER_STATE_CHANNEL, (event, value: unknown) => {
@@ -312,24 +615,55 @@ ipcMain.on(DRAWER_STATE_CHANNEL, (event, value: unknown) => {
   scheduleShellStateSave();
 });
 
+ipcMain.handle(SETTINGS_GET_CHANNEL, () => settingsSnapshot());
+ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (_event, value: unknown) => {
+  if (!value || typeof value !== "object") return settingsSnapshot();
+  const candidate = value as Partial<ShellState>;
+  if (typeof candidate.drawerCollapsed === "boolean") shellState.drawerCollapsed = candidate.drawerCollapsed;
+  if (candidate.whatsappTheme === "system" || candidate.whatsappTheme === "whatsapp") {
+    shellState.whatsappTheme = candidate.whatsappTheme;
+    whatsappThemeController?.setMode(candidate.whatsappTheme);
+  }
+  if (candidate.shortcuts && typeof candidate.shortcuts === "object") {
+    Object.assign(shellState.shortcuts, normalizeShortcutPreferences(candidate.shortcuts));
+  }
+  scheduleShellStateSave();
+  return settingsSnapshot();
+});
+
+ipcMain.on(SETTINGS_CLOSE_CHANNEL, (event) => {
+  if (settingsWindow && !settingsWindow.isDestroyed() && event.sender.id === settingsWindow.webContents.id) {
+    settingsWindow.close();
+  }
+});
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, commandLine) => {
-    if (commandLine.includes(TOGGLE_ARGUMENT)) {
-      togglePrettyZapWindow();
-      return;
-    }
-
-    restoreAndFocusPrettyZapWindow();
+    applyCliAction(parseCliArgs(commandLine));
   });
 
   app.whenReady().then(() => {
+    console.info("PrettyZap GPU status", app.getGPUFeatureStatus());
     createWindow();
     installApplicationMenu();
     createTray();
+    publishStatus();
+    void startDesktopControl({
+      show: showWindow,
+      hide: hidePrettyZapWindow,
+      toggle: togglePrettyZapWindow,
+      openSettings,
+      setTheme: (theme) => applyCliAction({ theme }),
+      quit: quitPrettyZap,
+      getStatus: publishStatus,
+    }).then((control) => {
+      desktopControl = control;
+      if (control) publishStatus();
+    });
 
     if (pendingToggle) {
       pendingToggle = false;
@@ -339,6 +673,10 @@ if (!hasSingleInstanceLock) {
       pendingFocus = false;
       restoreAndFocusPrettyZapWindow();
     }
+
+    // Driver flags passed to the first instance (e.g. `prettyzap --settings`
+    // or `prettyzap --theme system` when nothing is running yet).
+    applyCliAction(parseCliArgs(process.argv.slice(1)));
 
     const registered = globalShortcut.register(SHOW_HIDE_ACCELERATOR, () => {
       togglePrettyZapWindow();
@@ -361,6 +699,9 @@ if (!hasSingleInstanceLock) {
   app.on("will-quit", () => {
     isQuitting = true;
     persistShellState();
+    clearStatus();
+    desktopControl?.close();
+    desktopControl = undefined;
     tray?.destroy();
     tray = undefined;
     globalShortcut.unregister(SHOW_HIDE_ACCELERATOR);
