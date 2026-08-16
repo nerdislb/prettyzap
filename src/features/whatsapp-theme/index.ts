@@ -123,6 +123,11 @@ function formatRgb(rgb: Rgb): string {
     .join("")}`;
 }
 
+function formatRgbChannels(hex: string): string {
+  const rgb = parseRgb(hex);
+  return `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+}
+
 function mixColors(base: string, tint: string, tintWeight: number): string {
   const first = parseRgb(base);
   const second = parseRgb(tint);
@@ -205,20 +210,52 @@ function createSystemThemeCss(palette: OmarchyPalette): string {
     /* Paint-only rules. No display, geometry, hierarchy, or visibility changes. */
     ${root} {
       color-scheme: ${roles.mode};
-      --prettyzap-app-background: ${roles.appBackground};
-      --prettyzap-panel-background: ${roles.panelBackground};
-      --prettyzap-elevated-background: ${roles.elevatedBackground};
-      --prettyzap-input-background: ${roles.inputBackground};
-      --prettyzap-incoming-bubble: ${roles.incomingBubble};
-      --prettyzap-outgoing-bubble: ${roles.outgoingBubble};
-      --prettyzap-primary-text: ${roles.primaryText};
-      --prettyzap-secondary-text: ${roles.secondaryText};
-      --prettyzap-muted-text: ${roles.mutedText};
-      --prettyzap-border: ${roles.border};
-      --prettyzap-selection: ${roles.selection};
-      --prettyzap-accent: ${roles.accent};
-      --prettyzap-link: ${roles.link};
-      --prettyzap-unread-text: ${roles.unreadText};
+      --prettyzap-app-background: ${roles.appBackground} !important;
+      --prettyzap-panel-background: ${roles.panelBackground} !important;
+      --prettyzap-elevated-background: ${roles.elevatedBackground} !important;
+      --prettyzap-input-background: ${roles.inputBackground} !important;
+      --prettyzap-incoming-bubble: ${roles.incomingBubble} !important;
+      --prettyzap-outgoing-bubble: ${roles.outgoingBubble} !important;
+      --prettyzap-primary-text: ${roles.primaryText} !important;
+      --prettyzap-secondary-text: ${roles.secondaryText} !important;
+      --prettyzap-muted-text: ${roles.mutedText} !important;
+      --prettyzap-border: ${roles.border} !important;
+      --prettyzap-selection: ${roles.selection} !important;
+      --prettyzap-accent: ${roles.accent} !important;
+      --prettyzap-link: ${roles.link} !important;
+      --prettyzap-unread-text: ${roles.unreadText} !important;
+
+      /* WhatsApp's own surface tokens keep plain, preview, media, and quote
+         messages on one palette without painting arbitrary descendant divs. */
+      --background-default: ${roles.appBackground} !important;
+      --search-container-background: ${roles.panelBackground} !important;
+      --drawer-background-deep: ${roles.appBackground} !important;
+      --panel-background-deeper: ${roles.appBackground} !important;
+      --compose-input-background: ${roles.inputBackground} !important;
+      --compose-input-border: ${roles.border} !important;
+      --conversation-header-border: ${roles.border} !important;
+      --conversation-panel-border: ${roles.border} !important;
+      --dropdown-background: ${roles.elevatedBackground} !important;
+      --intro-background: ${roles.panelBackground} !important;
+      --WDS-background-wash-inset: ${roles.panelBackground} !important;
+      --WDS-background-wash-plain: ${roles.appBackground} !important;
+      --WDS-background-elevated-wash-inset: ${roles.elevatedBackground} !important;
+      --WDS-surface-default: ${roles.appBackground} !important;
+      --WDS-surface-emphasized: ${roles.panelBackground} !important;
+      --WDS-surface-elevated-default: ${roles.elevatedBackground} !important;
+      --WDS-surface-elevated-emphasized: ${roles.elevatedBackground} !important;
+      --WDS-content-default: ${roles.primaryText} !important;
+      --WDS-content-deemphasized: ${roles.secondaryText} !important;
+      --WDS-content-action-default: ${roles.primaryText} !important;
+      --WDS-content-disabled: ${roles.mutedText} !important;
+      --WDS-systems-chat-background-wallpaper: ${roles.appBackground} !important;
+      --WDS-systems-chat-surface-composer: ${roles.inputBackground} !important;
+      --WDS-systems-chat-surface-tray: ${roles.appBackground} !important;
+      --WDS-systems-bubble-surface-system: ${roles.incomingBubble} !important;
+      --WDS-systems-bubble-surface-incoming: ${roles.incomingBubble} !important;
+      --WDS-systems-bubble-surface-incoming-RGB: ${formatRgbChannels(roles.incomingBubble)} !important;
+      --WDS-systems-bubble-surface-outgoing: ${roles.outgoingBubble} !important;
+      --WDS-systems-bubble-surface-outgoing-RGB: ${formatRgbChannels(roles.outgoingBubble)} !important;
     }
 
     ${root} [data-testid="cell-frame-primary-detail"],
