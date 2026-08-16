@@ -9,6 +9,8 @@ export interface ShellState {
   drawerCollapsed: boolean;
   whatsappTheme: "whatsapp" | "system";
   notificationsEnabled: boolean;
+  /** Keep the custom palette even when the Omarchy theme changes. */
+  colorsPinned: boolean;
   shortcuts: ShortcutPreferences;
 }
 
@@ -31,6 +33,7 @@ export const DEFAULT_SHELL_STATE: ShellState = {
   drawerCollapsed: true,
   whatsappTheme: "whatsapp",
   notificationsEnabled: true,
+  colorsPinned: false,
   shortcuts: {
     toggleDrawer: "Ctrl+L",
     search: "Ctrl+/",
@@ -89,6 +92,7 @@ export function normalizeShellState(value: unknown): ShellState {
     drawerCollapsed: candidate.drawerCollapsed !== false,
     whatsappTheme: candidate.whatsappTheme === "system" ? "system" : "whatsapp",
     notificationsEnabled: candidate.notificationsEnabled !== false,
+    colorsPinned: candidate.colorsPinned === true,
     shortcuts: normalizeShortcutPreferences(candidate.shortcuts),
   };
 }

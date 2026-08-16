@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { test } from "node:test";
 import {
   DEFAULT_CUSTOM_PALETTE,
+  effectivePalette,
   parsePalette,
   paletteToRecord,
   readPrettyZapPalette,
@@ -112,4 +113,96 @@ test("default palette survives a full parse round-trip", () => {
   const palette = recordToPalette({ mode: record.mode, colors: record.colors });
   assert.ok(palette);
   assert.deepEqual(palette, DEFAULT_CUSTOM_PALETTE);
+});
+
+function withEnv(
+  vars: Record<string, string | undefined>,
+  fn: () => void,
+): void {
+  const saved = new Map(Object.entries(vars).map(([key]) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(vars)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    fn();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function makeDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "prettyzap-palette-env-"));
+  return dir;
+}
+
+const TOKYO_SOURCE = `mode = "dark"
+background = "#1a1b26"
+foreground = "#a9b1d6"
+muted = "#414868"
+accent = "#7aa2f7"
+selection = "#292e42"
+`;
+
+function omarchyPaletteSource(dir: string): string {
+  const file = path.join(dir, "omarchy", "current", "theme", "colors.toml");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, TOKYO_SOURCE);
+  return file;
+}
+
+test("effectivePalette: custom palette overrides the Omarchy theme", () => {
+  const configDir = makeDir();
+  const stateDir = makeDir();
+  try {
+    withEnv(
+      {
+        XDG_CONFIG_HOME: configDir,
+        XDG_STATE_HOME: stateDir,
+        OMARCHY_PATH: "/test/omarchy", // force the Omarchy path
+        PRETTYZAP_FORCE_TRAY: undefined,
+      },
+      () => {
+        omarchyPaletteSource(stateDir);
+        const fromOmarchy = effectivePalette();
+        assert.equal(fromOmarchy?.accent, "#7aa2f7");
+
+        writePrettyZapPalette(DEFAULT_CUSTOM_PALETTE);
+        const fromCustom = effectivePalette();
+        assert.deepEqual(fromCustom, DEFAULT_CUSTOM_PALETTE);
+      },
+    );
+  } finally {
+    fs.rmSync(configDir, { recursive: true, force: true });
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("effectivePalette: outside Omarchy only the custom palette counts", () => {
+  const configDir = makeDir();
+  const stateDir = makeDir();
+  try {
+    withEnv(
+      {
+        XDG_CONFIG_HOME: configDir,
+        XDG_STATE_HOME: stateDir,
+        OMARCHY_PATH: undefined,
+        PRETTYZAP_FORCE_TRAY: "1", // force the non-Omarchy path
+      },
+      () => {
+        omarchyPaletteSource(stateDir);
+        // The Omarchy file exists but must be ignored outside Omarchy.
+        assert.equal(effectivePalette(), undefined);
+
+        writePrettyZapPalette(DEFAULT_CUSTOM_PALETTE);
+        assert.deepEqual(effectivePalette(), DEFAULT_CUSTOM_PALETTE);
+      },
+    );
+  } finally {
+    fs.rmSync(configDir, { recursive: true, force: true });
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
 });

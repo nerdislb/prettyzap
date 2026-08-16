@@ -47,6 +47,10 @@ export interface PaletteColors {
 
 export interface PaletteSnapshot {
   kind: "omarchy" | "custom";
+  /** Whether an Omarchy palette is the fallback behind a custom override. */
+  omarchy: boolean;
+  /** User pinned the custom palette (only meaningful on Omarchy). */
+  pinned: boolean;
   mode: PaletteMode;
   colors: PaletteColors;
 }
@@ -57,6 +61,13 @@ export interface PaletteSource {
   kind: PaletteSourceKind;
   file: string;
   watchDir: string;
+}
+
+export interface PaletteSources {
+  /** PrettyZap's own palette; a saved file always takes precedence. */
+  custom: PaletteSource;
+  /** The live Omarchy theme, when running under Omarchy. */
+  omarchy: PaletteSource | undefined;
 }
 
 const PALETTE_KEYS: Record<keyof OmarchyPalette, string> = {
@@ -114,13 +125,23 @@ export function prettyZapPalettePath(): string {
   return path.join(configHome, "prettyzap", "colors.toml");
 }
 
-export function resolvePaletteSource(): PaletteSource {
-  if (isRunningUnderOmarchy()) {
-    const file = omarchyPalettePath();
-    return { kind: "omarchy", file, watchDir: path.dirname(file) };
-  }
-  const file = prettyZapPalettePath();
-  return { kind: "custom", file, watchDir: path.dirname(file) };
+export function resolvePaletteSources(): PaletteSources {
+  const customFile = prettyZapPalettePath();
+  return {
+    custom: { kind: "custom", file: customFile, watchDir: path.dirname(customFile) },
+    omarchy: isRunningUnderOmarchy()
+      ? { kind: "omarchy", file: omarchyPalettePath(), watchDir: path.dirname(omarchyPalettePath()) }
+      : undefined,
+  };
+}
+
+/**
+ * The palette that currently drives the System theme: a saved custom palette
+ * overrides the live Omarchy palette; outside Omarchy only the custom file
+ * (or nothing) applies.
+ */
+export function effectivePalette(): OmarchyPalette | undefined {
+  return readPrettyZapPalette() ?? (isRunningUnderOmarchy() ? readOmarchyPalette() : undefined);
 }
 
 /**
@@ -270,6 +291,14 @@ export function writePrettyZapPalette(palette: OmarchyPalette, file = prettyZapP
 export function readPrettyZapPalette(file = prettyZapPalettePath()): OmarchyPalette | undefined {
   try {
     return parsePalette(fs.readFileSync(file, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+export function readOmarchyPalette(): OmarchyPalette | undefined {
+  try {
+    return parsePalette(fs.readFileSync(omarchyPalettePath(), "utf8"));
   } catch {
     return undefined;
   }

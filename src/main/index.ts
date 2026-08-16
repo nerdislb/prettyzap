@@ -35,10 +35,10 @@ import {
   DEFAULT_CUSTOM_PALETTE,
   isRunningUnderOmarchy,
   paletteToRecord,
+  readOmarchyPalette,
   readPrettyZapPalette,
   recordToPalette,
   removePrettyZapPalette,
-  resolvePaletteSource,
   writePrettyZapPalette,
   type PaletteSnapshot,
 } from "./palette";
@@ -164,6 +164,7 @@ const SETTINGS_CLOSE_CHANNEL = "prettyzap:settings-close";
 const PALETTE_GET_CHANNEL = "prettyzap:palette-get";
 const PALETTE_SET_CHANNEL = "prettyzap:palette-set";
 const PALETTE_RESET_CHANNEL = "prettyzap:palette-reset";
+const PALETTE_PIN_CHANNEL = "prettyzap:palette-pin";
 const MEMORY_RECOVERY_TIMEOUT_MS = 30_000;
 const TRAY_ICON = nativeImage.createFromDataURL(
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAIAAADAAbR1AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRP///////wlY99wAAAAHdElNRQfqCBAAKTh3JqlvAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA4LTE2VDAwOjQxOjU2KzAwOjAw19CgsgAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOC0xNlQwMDo0MTo1NiswMDowMKaNGA4AAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDgtMTZUMDA6NDE6NTYrMDA6MDDxmDnRAAAAYklEQVQ4y2NkYFixoqWFgWaAiXZG08kCFmIU/f8fHl5djSkuyLhertf2A8Ov7h8eFFkAMQhTHL/RBCxAc3U4QzV+g3D5ZuhH8qgFBAHOVIQraeICuJIsC6kaSAVDPw5obgEALmsjxWv//f0AAAAASUVORK5CYII=",
@@ -188,11 +189,18 @@ let appReady = false;
 let unreadCount = 0;
 
 function paletteSnapshot(): PaletteSnapshot {
-  const source = resolvePaletteSource();
-  const palette = readPrettyZapPalette() ?? DEFAULT_CUSTOM_PALETTE;
+  const underOmarchy = isRunningUnderOmarchy();
+  // On Omarchy the saved palette only counts while pinned; elsewhere it
+  // always applies. Unpinning preserves the file for later.
+  const pinned = underOmarchy && shellState.colorsPinned;
+  const custom = (underOmarchy ? pinned : true) ? readPrettyZapPalette() : undefined;
+  const fallback = underOmarchy ? readOmarchyPalette() : undefined;
+  const palette = custom ?? fallback ?? DEFAULT_CUSTOM_PALETTE;
   const record = paletteToRecord(palette);
   return {
-    kind: source.kind,
+    kind: custom ? "custom" : underOmarchy ? "omarchy" : "custom",
+    omarchy: underOmarchy,
+    pinned,
     mode: record.mode,
     colors: record.colors,
   };
@@ -263,7 +271,7 @@ function settingsPage(): string {
 :root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#0e1420;color:#e8edf5}*{box-sizing:border-box}html,body{height:100%}body{margin:0;display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(1100px 560px at 85% -10%,#1c3044 0%,#101722 55%,#0e1420 100%)}main{flex:1;min-height:0;overflow-y:auto;width:min(100%,760px);margin:0 auto;padding:clamp(18px,4vw,36px) clamp(16px,4vw,34px) 14px}main::-webkit-scrollbar{width:10px}main::-webkit-scrollbar-track{background:transparent}main::-webkit-scrollbar-thumb{background:#2b3b50;border-radius:6px;border:2px solid transparent;background-clip:content-box}main::-webkit-scrollbar-thumb:hover{background:#3d5270;border:2px solid transparent;background-clip:content-box}h1{font-size:clamp(24px,5vw,30px);margin:0 0 6px;letter-spacing:-.01em}p{color:#8fa0b8;margin:0 0 26px;line-height:1.5;max-width:60ch}.card{background:linear-gradient(180deg,#16202e,#141d2a);border:1px solid #263448;border-radius:14px;padding:clamp(16px,3vw,24px);margin:16px 0;box-shadow:0 12px 32px rgba(4,10,20,.35)}h2{font-size:13px;margin:0 0 18px;color:#79d5b0;letter-spacing:.12em;text-transform:uppercase;font-weight:600}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}label{display:grid;min-width:0;gap:8px;color:#c6d0dc;font-size:13px}input{width:100%;min-width:0;border:1px solid #2c3c52;border-radius:8px;background:#0d1520;color:#f2f6fa;padding:11px 12px;font:inherit;transition:border-color .15s ease,box-shadow .15s ease}input:hover{border-color:#4a6079}input:focus{outline:none;border-color:#79d5b0;box-shadow:0 0 0 3px rgba(121,213,176,.18)}.check{display:flex;grid-template-columns:none;align-items:center;gap:12px;margin:14px 0}.check input{width:auto;accent-color:#79d5b0}.hint{font-size:12px;color:#77879d;margin:10px 0 0;line-height:1.5}.actions{flex:none;display:flex;align-items:center;gap:16px;border-top:1px solid #22303f;background:rgba(14,20,32,.88);backdrop-filter:blur(14px);padding:14px clamp(16px,4vw,34px)}#status{flex:1;min-width:0;max-width:460px;min-height:36px;display:flex;align-items:center;padding:8px 12px;border-radius:8px;font-size:12px}#status.success{color:#a5f0d0;background:#173b35;border:1px solid #286b5d}#status.error{color:#ffb7b7;background:#45252b;border:1px solid #85434d}.buttons{display:flex;gap:10px;flex:none}button{border:1px solid #33455c;border-radius:9px;padding:10px 18px;background:#1c2b3e;color:#dce7f1;font:inherit;font-weight:500;cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .08s ease}button:hover{background:#27394f;border-color:#5e7893}button:focus-visible{outline:2px solid #79d5b0;outline-offset:2px}button:active{transform:translateY(1px)}button.primary{background:#79d5b0;border-color:#79d5b0;color:#0f241e;font-weight:600;box-shadow:0 2px 10px rgba(121,213,176,.25)}button.primary:hover{background:#8fe2bf;border-color:#8fe2bf}button.primary:active{background:#62bd9a;box-shadow:none}button:disabled{cursor:wait;opacity:.65}.color-row{display:flex;align-items:center;gap:8px;min-width:0}.color-row input[type="color"]{width:44px;height:36px;padding:3px;flex:none;cursor:pointer;border-radius:8px}.color-row input[type="text"]{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;text-transform:lowercase}select{width:100%;min-width:0;border:1px solid #2c3c52;border-radius:8px;background:#0d1520;color:#f2f6fa;padding:11px 12px;font:inherit;transition:border-color .15s ease,box-shadow .15s ease}select:hover{border-color:#4a6079}select:focus{outline:none;border-color:#79d5b0;box-shadow:0 0 0 3px rgba(121,213,176,.18)}select:disabled,input:disabled{opacity:.55;cursor:not-allowed}.inline-actions{display:flex;gap:10px;align-items:center;margin-top:16px}@media(max-width:560px){.grid{grid-template-columns:1fr}.buttons button{flex:1}.card{margin:12px 0}}
 </style></head><body><main><h1>PrettyZap Settings</h1><p>Customize shortcuts and the way PrettyZap behaves around WhatsApp Web.</p>
 <section class="card"><h2>Appearance</h2><label class="check"><input id="systemTheme" type="checkbox"> Apply the system theme to WhatsApp</label><div class="hint">When disabled, WhatsApp keeps its own appearance. Changes apply immediately.</div></section>
-<section class="card" id="colors-card"><h2>Colors</h2><div class="hint" id="colorsNote"></div><div class="grid">
+<section class="card" id="colors-card"><h2>Colors</h2><div class="hint" id="colorsNote"></div><label class="check" id="colorsPinWrap" style="display:none;margin:14px 0 4px"><input id="colorsPin" type="checkbox"> Keep these colors even when the Omarchy theme changes</label><div class="grid">
 <label>Mode<select id="paletteMode"><option value="dark">Dark</option><option value="light">Light</option></select></label>
 <label>Background<span class="color-row"><input type="color" data-color-key="background" value="#121212"><input type="text" data-color-hex="background" value="#121212" spellcheck="false" autocomplete="off"></span></label>
 <label>Dark background<span class="color-row"><input type="color" data-color-key="darkBackground" value="#0d0d0d"><input type="text" data-color-hex="darkBackground" value="#0d0d0d" spellcheck="false" autocomplete="off"></span></label>
@@ -294,17 +302,20 @@ const colorFields=[...document.querySelectorAll('[data-color-key]')];
 const hexFields=[...document.querySelectorAll('[data-color-hex]')];
 const modeSelect=document.getElementById('paletteMode');
 const colorsNote=document.getElementById('colorsNote');
+const colorsPin=document.getElementById('colorsPin');
+const colorsPinWrap=document.getElementById('colorsPinWrap');
 const resetColors=document.getElementById('resetColors');
 let colorsEditable=true;let paletteModeValue='dark';let paletteColors={};let paletteSaveTimer;
 const setColorsEditable=(editable)=>{colorsEditable=editable;modeSelect.disabled=!editable;colorFields.forEach(f=>f.disabled=!editable);hexFields.forEach(f=>f.disabled=!editable);resetColors.disabled=!editable};
-const applyPalette=(p)=>{paletteModeValue=p.mode;paletteColors={...p.colors};modeSelect.value=p.mode;colorFields.forEach(f=>{const v=paletteColors[f.dataset.colorKey]||'#000000';f.value=v;const hex=hexFields.find(h=>h.dataset.colorHex===f.dataset.colorKey);if(hex)hex.value=v.toLowerCase()})};
+const applyPalette=(p)=>{paletteModeValue=p.mode;paletteColors={...p.colors};modeSelect.value=p.mode;colorsPinWrap.style.display=p.omarchy?'':'none';colorsPin.checked=p.pinned===true;colorsNote.textContent=p.omarchy?(p.pinned?'Your custom colors override the Omarchy theme — theme changes no longer affect WhatsApp.':'Following your active Omarchy theme. Enable “Keep these colors…” to take control.'):'Custom colors for this device, used by the System theme.';colorFields.forEach(f=>{const v=paletteColors[f.dataset.colorKey]||'#000000';f.value=v;const hex=hexFields.find(h=>h.dataset.colorHex===f.dataset.colorKey);if(hex)hex.value=v.toLowerCase()});setColorsEditable(p.kind==='custom')};
 const refreshAppearanceCheckbox=()=>api.get().then(s=>{systemTheme.checked=s.whatsappTheme==='system'}).catch(()=>{});
 const pushPalette=()=>{clearTimeout(paletteSaveTimer);paletteSaveTimer=setTimeout(()=>{api.setPalette({mode:paletteModeValue,colors:paletteColors}).then(p=>{applyPalette(p);setStatus('Colors saved and applied','success');return refreshAppearanceCheckbox()}).catch(()=>setStatus('Could not save colors','error'))},300)};
 colorFields.forEach(f=>f.addEventListener('input',()=>{const v=f.value.toLowerCase();paletteColors[f.dataset.colorKey]=v;const hex=hexFields.find(h=>h.dataset.colorHex===f.dataset.colorKey);if(hex)hex.value=v;pushPalette()}));
 hexFields.forEach(h=>h.addEventListener('change',()=>{const v=h.value.trim().toLowerCase();if(!/^#[0-9a-f]{6}$/.test(v)){h.value=(paletteColors[h.dataset.colorHex]||'').toLowerCase();setStatus('Enter a color like #1a1b26','error');return}paletteColors[h.dataset.colorHex]=v;const cf=colorFields.find(f=>f.dataset.colorKey===h.dataset.colorHex);if(cf)cf.value=v;pushPalette()}));
 modeSelect.addEventListener('change',()=>{paletteModeValue=modeSelect.value;pushPalette()});
+colorsPin.addEventListener('change',()=>{api.setPalettePinned(colorsPin.checked).then(p=>{applyPalette(p);setStatus(colorsPin.checked?'Colors pinned: theme changes are ignored':'Now following the Omarchy theme','success');return refreshAppearanceCheckbox()}).catch(()=>{colorsPin.checked=!colorsPin.checked;setStatus('Could not change color pinning','error')})});
 resetColors.addEventListener('click',()=>{resetColors.disabled=true;api.resetPalette().then(p=>{applyPalette(p);setStatus('Colors reset','success');return refreshAppearanceCheckbox()}).catch(()=>setStatus('Could not reset colors','error')).finally(()=>{resetColors.disabled=!colorsEditable})});
-api.getPalette().then(p=>{setColorsEditable(p.kind!=='omarchy');colorsNote.textContent=p.kind==='omarchy'?'Colors follow your active Omarchy theme (read-only).':'Custom colors — used by the System theme on this device. Omarchy is not required.';applyPalette(p)}).catch(()=>{colorsNote.textContent='Unable to load colors.';setColorsEditable(false)});</script></body></html>`;
+api.getPalette().then(applyPalette).catch(()=>{colorsNote.textContent='Unable to load colors.';setColorsEditable(false)});</script></body></html>`;
 }
 
 function openSettings(focus?: "colors"): void {
@@ -727,6 +738,9 @@ function createWindow(): void {
       updateWhatsAppThemeMenu();
       publishStatus();
     },
+    // On Omarchy the saved palette only applies while pinned; elsewhere the
+    // custom palette is always active.
+    () => shellState.colorsPinned || !isRunningUnderOmarchy(),
   );
   whatsappThemeController = themeController;
 
@@ -823,18 +837,45 @@ ipcMain.handle(PALETTE_SET_CHANNEL, (event, value: unknown) => {
   const palette = recordToPalette(value);
   if (!palette) return paletteSnapshot();
   writePrettyZapPalette(palette);
+  shellState.colorsPinned = true;
+  scheduleShellStateSave();
   whatsappThemeController?.refreshPalette();
-  // Saving colors implies the user wants to see them: switch the System
-  // theme on when it was left on WhatsApp's own appearance.
+  // Saving/pinning colors implies the user wants to see them: switch the
+  // System theme on when it was left on WhatsApp's own appearance.
   if (whatsappThemeController?.getMode() !== "system") {
     whatsappThemeController?.setMode("system");
   }
   return paletteSnapshot();
 });
 
+ipcMain.handle(PALETTE_PIN_CHANNEL, (event, value: unknown) => {
+  if (!isSettingsSender(event)) return null;
+  const pinned = value === true;
+  if (pinned) {
+    // "Keep these colors even when the theme changes": snapshot the current
+    // theme into the custom file so pinning never starts from an empty state.
+    if (!readPrettyZapPalette()) {
+      const underOmarchy = isRunningUnderOmarchy();
+      writePrettyZapPalette(readOmarchyPalette() ?? DEFAULT_CUSTOM_PALETTE);
+      if (underOmarchy && whatsappThemeController?.getMode() !== "system") {
+        whatsappThemeController?.setMode("system");
+      }
+    }
+    shellState.colorsPinned = true;
+    scheduleShellStateSave();
+  } else {
+    shellState.colorsPinned = false;
+    scheduleShellStateSave();
+  }
+  whatsappThemeController?.refreshPalette();
+  return paletteSnapshot();
+});
+
 ipcMain.handle(PALETTE_RESET_CHANNEL, (event) => {
   if (!isSettingsSender(event)) return null;
   removePrettyZapPalette();
+  shellState.colorsPinned = false;
+  scheduleShellStateSave();
   whatsappThemeController?.refreshPalette();
   return paletteSnapshot();
 });
