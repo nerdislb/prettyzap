@@ -8,6 +8,7 @@ export interface ShellState {
   maximized: boolean;
   drawerCollapsed: boolean;
   whatsappTheme: "whatsapp" | "system";
+  notificationsEnabled: boolean;
   shortcuts: ShortcutPreferences;
 }
 
@@ -29,6 +30,7 @@ export const DEFAULT_SHELL_STATE: ShellState = {
   maximized: false,
   drawerCollapsed: true,
   whatsappTheme: "whatsapp",
+  notificationsEnabled: true,
   shortcuts: {
     toggleDrawer: "Ctrl+L",
     search: "Ctrl+/",
@@ -86,6 +88,7 @@ export function normalizeShellState(value: unknown): ShellState {
     maximized: candidate.maximized === true,
     drawerCollapsed: candidate.drawerCollapsed !== false,
     whatsappTheme: candidate.whatsappTheme === "system" ? "system" : "whatsapp",
+    notificationsEnabled: candidate.notificationsEnabled !== false,
     shortcuts: normalizeShortcutPreferences(candidate.shortcuts),
   };
 }

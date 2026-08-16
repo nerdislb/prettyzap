@@ -31,6 +31,7 @@ import {
 } from "./status";
 import { startDesktopControl, type DesktopControl } from "./desktop-control";
 import { isWindowPresented, resolveToggleAction } from "./window-state";
+import { notificationPolicyScript, parseUnreadCount } from "./unread-count";
 
 app.setName("PrettyZap");
 
@@ -73,6 +74,7 @@ const HIDE_ARGUMENT = "--hide";
 const SETTINGS_ARGUMENT = "--settings";
 const QUIT_ARGUMENT = "--quit";
 const THEME_ARGUMENT = "--theme";
+const NOTIFICATIONS_ARGUMENT = "--notifications";
 
 type ThemeArgument = PrettyZapTheme | "toggle";
 
@@ -83,6 +85,7 @@ interface CliAction {
   settings?: boolean;
   quit?: boolean;
   theme?: ThemeArgument;
+  notifications?: "toggle" | "on" | "off";
 }
 
 // Parse the command line for the Omarchy widget's driver flags. Unknown and
@@ -115,6 +118,14 @@ function parseCliArgs(args: readonly string[]): CliAction {
         }
         break;
       }
+      case NOTIFICATIONS_ARGUMENT: {
+        const value = args[i + 1];
+        if (value === "toggle" || value === "on" || value === "off") {
+          action.notifications = value;
+          i += 1;
+        }
+        break;
+      }
       default:
         // Chromium only preserves switch values in the `--theme=<value>` form;
         // the two-token `--theme <value>` arrives detached and reordered.
@@ -124,12 +135,19 @@ function parseCliArgs(args: readonly string[]): CliAction {
             action.theme = value;
           }
         }
+        if (args[i].startsWith("--notifications=")) {
+          const value = args[i].slice("--notifications=".length);
+          if (value === "toggle" || value === "on" || value === "off") {
+            action.notifications = value;
+          }
+        }
         break;
     }
   }
   return action;
 }
 const DRAWER_STATE_CHANNEL = "prettyzap:drawer-state";
+const WHATSAPP_UNREAD_CHANNEL = "prettyzap:whatsapp-unread";
 const SETTINGS_GET_CHANNEL = "prettyzap:settings-get";
 const SETTINGS_UPDATE_CHANNEL = "prettyzap:settings-update";
 const SETTINGS_CLOSE_CHANNEL = "prettyzap:settings-close";
@@ -154,6 +172,7 @@ let recoverMemoryMenuItem: Electron.MenuItem | undefined;
 let recoveringMemory = false;
 let desktopControl: DesktopControl | undefined;
 let appReady = false;
+let unreadCount = 0;
 
 function runningUnderOmarchy(): boolean {
   if (process.env.PRETTYZAP_FORCE_TRAY === "1") return false;
@@ -169,6 +188,8 @@ function publishStatus(): AppStatus {
     mode,
     isWindowPresented(prettyZapWindow),
     appReady,
+    unreadCount,
+    shellState.notificationsEnabled,
   );
   desktopControl?.publish(status);
   return status;
@@ -207,10 +228,11 @@ function quitPrettyZap(): void {
   app.quit();
 }
 
-function settingsSnapshot(): Pick<ShellState, "drawerCollapsed" | "whatsappTheme" | "shortcuts"> {
+function settingsSnapshot(): Pick<ShellState, "drawerCollapsed" | "whatsappTheme" | "notificationsEnabled" | "shortcuts"> {
   return {
     drawerCollapsed: shellState.drawerCollapsed,
     whatsappTheme: shellState.whatsappTheme,
+    notificationsEnabled: shellState.notificationsEnabled,
     shortcuts: { ...shellState.shortcuts },
   };
 }
@@ -330,6 +352,46 @@ function hidePrettyZapWindow(): void {
   }
 }
 
+function updateUnreadCount(nextCount: number): void {
+  const normalized = Number.isFinite(nextCount) && nextCount > 0
+    ? Math.min(Math.trunc(nextCount), 999_999)
+    : 0;
+  if (normalized === unreadCount) return;
+  unreadCount = normalized;
+  publishStatus();
+}
+
+function applyNotificationPolicy(): void {
+  const webContents = whatsappWebContents;
+  if (!webContents || webContents.isDestroyed()) return;
+  void webContents.executeJavaScript(
+    notificationPolicyScript(shellState.notificationsEnabled),
+    true,
+  ).catch((error: unknown) => {
+    console.warn("Unable to apply PrettyZap notification policy", error);
+  });
+}
+
+function setNotificationsEnabled(enabled: boolean): void {
+  if (!appReady) {
+    console.warn("PrettyZap notification setting ignored: app is not ready");
+    return;
+  }
+  if (shellState.notificationsEnabled === enabled) {
+    applyNotificationPolicy();
+    publishStatus();
+    return;
+  }
+  shellState.notificationsEnabled = enabled;
+  scheduleShellStateSave();
+  applyNotificationPolicy();
+  publishStatus();
+}
+
+function toggleNotifications(): void {
+  setNotificationsEnabled(!shellState.notificationsEnabled);
+}
+
 // Apply the widget's fire-and-forget driver flags. Order is deliberate:
 // theme and settings run first so they work even when the window action that
 // follows (re)shows the app; hide beats toggle/show; an explicit toggle wins
@@ -348,6 +410,15 @@ function applyCliAction(action: CliAction, existingInstance = true): void {
           : "system"
         : action.theme;
     whatsappThemeController?.setMode(mode);
+  }
+
+  // Notification preference changes are commands for an existing instance,
+  // never a reason to launch PrettyZap solely to mutate a setting.
+  if (action.notifications && existingInstance) {
+    const enabled = action.notifications === "toggle"
+      ? !shellState.notificationsEnabled
+      : action.notifications === "on";
+    setNotificationsEnabled(enabled);
   }
 
   if (action.settings) {
@@ -513,6 +584,13 @@ function createWindow(): void {
 
   prettyZapWindow = window;
   whatsappWebContents = whatsappView.webContents;
+  const whatsappSession = session.fromPartition(WHATSAPP_PARTITION);
+  whatsappSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === "notifications" ? shellState.notificationsEnabled : true);
+  });
+  whatsappSession.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === "notifications" ? shellState.notificationsEnabled : true;
+  });
   let rendererRecoveryAttempts = 0;
   let rendererRecoveryResetTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -530,7 +608,12 @@ function createWindow(): void {
   whatsappView.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
     console.error("Unable to load WhatsApp Web", errorCode, errorDescription);
   });
+  whatsappView.webContents.on("page-title-updated", (_event, title) => {
+    updateUnreadCount(parseUnreadCount(title));
+  });
   whatsappView.webContents.on("did-finish-load", () => {
+    updateUnreadCount(parseUnreadCount(whatsappView.webContents.getTitle()));
+    applyNotificationPolicy();
     if (rendererRecoveryResetTimer) clearTimeout(rendererRecoveryResetTimer);
     rendererRecoveryResetTimer = setTimeout(() => {
       rendererRecoveryResetTimer = undefined;
@@ -604,6 +687,7 @@ function createWindow(): void {
     if (prettyZapWindow === window) prettyZapWindow = undefined;
     if (whatsappWebContents === whatsappView.webContents) {
       whatsappWebContents = undefined;
+      updateUnreadCount(0);
     }
     if (!whatsappView.webContents.isDestroyed()) {
       whatsappView.webContents.close();
@@ -622,6 +706,12 @@ ipcMain.on(DRAWER_STATE_CHANNEL, (event, value: unknown) => {
   scheduleShellStateSave();
 });
 
+ipcMain.on(WHATSAPP_UNREAD_CHANNEL, (event, value: unknown) => {
+  if (!whatsappWebContents || event.sender.id !== whatsappWebContents.id) return;
+  if (typeof value !== "number" || !Number.isFinite(value)) return;
+  updateUnreadCount(value);
+});
+
 ipcMain.handle(SETTINGS_GET_CHANNEL, () => settingsSnapshot());
 ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (_event, value: unknown) => {
   if (!value || typeof value !== "object") return settingsSnapshot();
@@ -630,6 +720,9 @@ ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (_event, value: unknown) => {
   if (candidate.whatsappTheme === "system" || candidate.whatsappTheme === "whatsapp") {
     shellState.whatsappTheme = candidate.whatsappTheme;
     whatsappThemeController?.setMode(candidate.whatsappTheme);
+  }
+  if (typeof candidate.notificationsEnabled === "boolean") {
+    setNotificationsEnabled(candidate.notificationsEnabled);
   }
   if (candidate.shortcuts && typeof candidate.shortcuts === "object") {
     Object.assign(shellState.shortcuts, normalizeShortcutPreferences(candidate.shortcuts));
@@ -665,6 +758,7 @@ if (!hasSingleInstanceLock) {
       toggle: togglePrettyZapWindow,
       openSettings,
       setTheme: (theme) => applyCliAction({ theme }),
+      toggleNotifications,
       quit: quitPrettyZap,
       getStatus: publishStatus,
     }).then((control) => {

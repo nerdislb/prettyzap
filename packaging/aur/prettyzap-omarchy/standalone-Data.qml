@@ -24,7 +24,11 @@ Item {
   property bool installed: true
   property string theme: "" // "whatsapp" | "system" | "" while unknown
   property int pid: 0
+  property bool ready: false
+  property int unreadCount: 0
+  property bool notificationsEnabled: true
   property int checkedPid: 0
+  readonly property bool notificationControlReady: root.running && root.ready
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string statusPath:
@@ -51,6 +55,9 @@ Item {
   function resetStatus() {
     root.theme = ""
     root.pid = 0
+    root.ready = false
+    root.unreadCount = 0
+    root.notificationsEnabled = true
     root.running = false
     root.checkedPid = 0
   }
@@ -65,6 +72,10 @@ Item {
         var nextPid = isFinite(p) && p > 0 ? p : 0
         if (root.pid !== nextPid) root.running = false
         root.pid = nextPid
+        root.ready = parsed.ready === true
+        var unread = parseInt(parsed.unreadCount, 10)
+        root.unreadCount = isFinite(unread) && unread > 0 ? unread : 0
+        root.notificationsEnabled = parsed.notificationsEnabled !== false
       } else {
         root.resetStatus()
       }
@@ -152,6 +163,13 @@ Item {
   function toggleTheme() {
     if (root.theme === "system") setTheme("whatsapp")
     else setTheme("system")
+  }
+  function toggleNotifications() {
+    if (!root.notificationControlReady) {
+      console.warn("prettyzap notifications action ignored: app is not ready")
+      return
+    }
+    run(root.launchArgs.concat(["--notifications=toggle"]))
   }
 
   Component.onCompleted: {

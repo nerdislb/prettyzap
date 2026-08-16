@@ -2,8 +2,8 @@
 
 A native Quickshell bar widget for [PrettyZap](https://github.com/prettyletto/prettyzap),
 the keyboard-first WhatsApp Web desktop shell. One bar icon opens/hides the
-app, and a popup panel offers Open / Hide, Settings, and the WhatsApp/System
-theme toggle.
+app, and a popup panel offers Open / Hide, Settings, the WhatsApp/System theme
+toggle, unread count, and notification mute control.
 
 The widget is **purely additive**: enabling it adds a single entry to one bar
 section. Nothing else in `~/.config/omarchy/shell.json` is touched, and the
@@ -20,13 +20,14 @@ widget there.
 - **Middle-click** — open the PrettyZap settings window.
 - **Right-click** — open the popup panel.
 - **Panel** — branding header, live status line, Open / Hide, Settings, Theme,
-  and Quit buttons.
+  notification mute/unmute, and Quit buttons. An unread badge is shown on the
+  bar icon when WhatsApp Web reports unread items.
 
 ## How it works
 
 - `Data.qml` watches the atomic `~/.config/prettyzap/status.json` for theme,
-  pid, visibility, readiness, and revision. A slow pid check is retained only
-  for crash recovery.
+  pid, visibility, readiness, unread count, notification preference, and
+  revision. A slow pid check is retained only for crash recovery.
 - Existing instances receive actions through the session D-Bus service
   `org.prettyzap.Desktop`; CLI flags are used when D-Bus is unavailable.
 
@@ -71,8 +72,11 @@ omarchy plugin enable prettyletto.prettyzap
 - PrettyZap installed (`prettyzap` on PATH) — the widget shows a hint when it
   is missing
 
-## Not included (yet)
+## Notes
 
-- Unread-message badge (needs WhatsApp Web DOM scraping; `status.json` reserves
-  the field)
-- A separate `panel` kind — the popup ships inside the bar widget
+- The unread count comes from Chromium's WhatsApp Web page title (`(3)
+  WhatsApp`), so it does not depend on private WhatsApp DOM selectors.
+- Notification mute affects PrettyZap's WhatsApp Web session and persists in
+  `~/.config/prettyzap/shell-state.json`.
+- A separate `panel` kind is unnecessary; the popup ships inside the bar
+  widget.

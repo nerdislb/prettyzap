@@ -25,9 +25,12 @@ Item {
   property int pid: 0
   property bool appVisible: false
   property bool ready: false
+  property int unreadCount: 0
+  property bool notificationsEnabled: true
   property int revision: 0
   property var pendingActions: []
   property int checkedPid: 0
+  readonly property bool notificationControlReady: root.running && root.ready
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string statusPath:
@@ -56,6 +59,8 @@ Item {
     root.pid = 0
     root.appVisible = false
     root.ready = false
+    root.unreadCount = 0
+    root.notificationsEnabled = true
     root.revision = 0
     root.running = false
     root.checkedPid = 0
@@ -73,6 +78,9 @@ Item {
         root.pid = nextPid
         root.appVisible = parsed.visible === true
         root.ready = parsed.ready === true
+        var unread = parseInt(parsed.unreadCount, 10)
+        root.unreadCount = isFinite(unread) && unread > 0 ? unread : 0
+        root.notificationsEnabled = parsed.notificationsEnabled !== false
         var r = parseInt(parsed.revision, 10)
         root.revision = isFinite(r) && r >= 0 ? r : 0
       } else {
@@ -153,6 +161,7 @@ Item {
     if (action === "settings") return root.launchArgs.concat(["--settings"])
     if (action === "quit") return root.launchArgs.concat(["--quit"])
     if (action === "theme") return root.launchArgs.concat(["--theme=toggle"])
+    if (action === "notifications") return root.launchArgs.concat(["--notifications=toggle"])
     return root.launchArgs
   }
 
@@ -163,7 +172,8 @@ Item {
       : action === "toggle" ? "Toggle"
       : action === "settings" ? "OpenSettings"
       : action === "quit" ? "Quit"
-      : action === "theme" ? "ToggleTheme" : "Show"
+      : action === "theme" ? "ToggleTheme"
+      : action === "notifications" ? "ToggleNotifications" : "Show"
     var command = ["gdbus", "call", "--session", "--dest", root.busName,
       "--object-path", root.objectPath, "--method", root.interfaceName + "." + method]
     if (action === "set-whatsapp" || action === "set-system")
@@ -172,6 +182,10 @@ Item {
   }
 
   function enqueue(action) {
+    if (action === "notifications" && !root.notificationControlReady) {
+      console.warn("prettyzap notifications action ignored: app is not ready")
+      return
+    }
     root.pendingActions = root.pendingActions.concat([action])
     pump()
   }
@@ -212,6 +226,7 @@ Item {
   function toggleTheme() {
     enqueue("theme")
   }
+  function toggleNotifications() { enqueue("notifications") }
 
   Component.onCompleted: {
     root.checkInstalled()

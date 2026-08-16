@@ -11,6 +11,7 @@ export interface DesktopControlCallbacks {
   toggle(): void;
   openSettings(): void;
   setTheme(theme: "whatsapp" | "system" | "toggle"): void;
+  toggleNotifications(): void;
   quit(): void;
   getStatus(): AppStatus;
 }
@@ -30,6 +31,7 @@ class PrettyZapDesktopInterface extends dbusInterface.Interface {
     }
   }
   ToggleTheme(): void { this.callbacks.setTheme("toggle"); }
+  ToggleNotifications(): void { this.callbacks.toggleNotifications(); }
   Quit(): void { this.callbacks.quit(); }
   GetStatus(): string { return JSON.stringify(this.callbacks.getStatus()); }
   StatusChanged(status: string): string { return status; }
@@ -43,6 +45,7 @@ PrettyZapDesktopInterface.configureMembers({
     OpenSettings: { inSignature: "", outSignature: "" },
     SetTheme: { inSignature: "s", outSignature: "" },
     ToggleTheme: { inSignature: "", outSignature: "" },
+    ToggleNotifications: { inSignature: "", outSignature: "" },
     Quit: { inSignature: "", outSignature: "" },
     GetStatus: { inSignature: "", outSignature: "s" },
   },

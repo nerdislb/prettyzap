@@ -10,6 +10,8 @@ export interface AppStatus {
   theme: PrettyZapTheme;
   visible: boolean;
   ready: boolean;
+  unreadCount: number;
+  notificationsEnabled: boolean;
   revision: number;
 }
 
@@ -30,6 +32,8 @@ export function writeStatus(
   theme: PrettyZapTheme,
   visible: boolean,
   ready: boolean,
+  unreadCount: number,
+  notificationsEnabled: boolean,
 ): AppStatus {
   const file = statusPath();
   const status: AppStatus = {
@@ -38,6 +42,8 @@ export function writeStatus(
     theme,
     visible,
     ready,
+    unreadCount,
+    notificationsEnabled,
     revision: ++revision,
   };
   try {

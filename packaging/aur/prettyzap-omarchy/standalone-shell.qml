@@ -99,6 +99,39 @@ ShellRoot {
         border.width: 1.5
       }
 
+      Rectangle {
+        visible: data.notificationControlReady
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        width: 9
+        height: 9
+        radius: width / 2
+        color: data.notificationsEnabled ? root.ok : "#ef4444"
+        border.color: root.fg
+        border.width: 1
+      }
+
+      Rectangle {
+        visible: data.unreadCount > 0
+        anchors.top: parent.top
+        anchors.right: parent.right
+        width: data.unreadCount >= 100 ? 24 : data.unreadCount >= 10 ? 17 : 14
+        height: 14
+        radius: height / 2
+        color: "#d9485f"
+        border.color: root.fg
+        border.width: 1
+
+        Text {
+          anchors.centerIn: parent
+          text: data.unreadCount >= 100 ? "99+" : String(data.unreadCount)
+          color: "white"
+          font.family: "monospace"
+          font.pixelSize: data.unreadCount >= 100 ? 7 : 8
+          font.bold: true
+        }
+      }
+
       MouseArea {
         id: pillMouse
         anchors.fill: parent
@@ -257,6 +290,15 @@ ShellRoot {
             enabled: data.running
             onClicked: {
               data.toggleTheme()
+              popup.visible = false
+            }
+          }
+
+          ActionButton {
+            label: data.notificationsEnabled ? "Mute" : "Unmute"
+            enabled: data.notificationControlReady
+            onClicked: {
+              data.toggleNotifications()
               popup.visible = false
             }
           }

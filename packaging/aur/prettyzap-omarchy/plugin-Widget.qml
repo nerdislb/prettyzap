@@ -57,6 +57,41 @@ BarWidget {
     verticalAlignment: Text.AlignVCenter
   }
 
+  Rectangle {
+    visible: data.unreadCount > 0
+    anchors.top: parent.top
+    anchors.right: parent.right
+    width: data.unreadCount >= 100
+      ? Style.space(24)
+      : data.unreadCount >= 10 ? Style.space(17) : Style.space(14)
+    height: Style.space(14)
+    radius: height / 2
+    color: "#d9485f"
+    border.color: root.foreground
+    border.width: 1
+
+    Text {
+      anchors.centerIn: parent
+      text: data.unreadCount >= 100 ? "99+" : String(data.unreadCount)
+      color: "white"
+      font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      font.pixelSize: data.unreadCount >= 100 ? 7 : 8
+      font.bold: true
+    }
+  }
+
+  Rectangle {
+    visible: data.notificationControlReady
+    anchors.left: parent.left
+    anchors.bottom: parent.bottom
+    width: Style.space(9)
+    height: Style.space(9)
+    radius: width / 2
+    color: data.notificationsEnabled ? "#22c55e" : "#ef4444"
+    border.color: root.foreground
+    border.width: 1
+  }
+
   MouseArea {
     anchors.fill: parent
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
@@ -142,6 +177,16 @@ BarWidget {
         foreground: root.foreground
         enabled: data.running
         onClicked: { data.toggleTheme(); root.close() }
+      }
+
+      Button {
+        width: parent.width
+        text: data.notificationsEnabled ? "Disable notifications" : "Enable notifications"
+        iconText: data.notificationsEnabled ? "󰂛" : "󰂚"
+        leftAlign: true
+        foreground: root.foreground
+        enabled: data.notificationControlReady
+        onClicked: { data.toggleNotifications(); root.close() }
       }
 
       Button {
