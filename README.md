@@ -110,7 +110,7 @@ On Omarchy, the bar icon is the primary control surface. Install the published
 plugin with:
 
 ```bash
-omarchy plugin add https://github.com/prettyletto/prettyzap-omarchy-plugin.git --enable --yes
+omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 ```
 
 Left-click opens or hides PrettyZap. Right-click opens the control panel.

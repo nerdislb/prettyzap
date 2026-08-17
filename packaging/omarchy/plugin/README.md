@@ -51,10 +51,10 @@ From the repo (does not touch the rest of the bar):
 ./packaging/omarchy/install.sh            # copies + enables the plugin
 ```
 
-Or via the plugin registry once this folder is published as its own repo:
+Or directly from the PrettyZap repository's plugin branch:
 
 ```bash
-omarchy plugin add https://github.com/prettyletto/prettyzap-omarchy-plugin.git --enable --yes
+omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 ```
 
 Or, by hand:
