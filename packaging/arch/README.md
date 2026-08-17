@@ -1,10 +1,8 @@
 # Arch packaging
 
-The AUR packaging is split deliberately:
-
-- `prettyzap-bin` is the clean, Omarchy-neutral x86_64 package.
-- `prettyzap-omarchy` is an optional package containing only user-opt-in
-  Omarchy menu integration assets.
+`prettyzap-bin` is the single AUR package. It provides the PrettyZap desktop
+app; the optional Omarchy bar plugin is installed directly from GitHub with
+`omarchy plugin add`.
 
 The core package unpacks the tested AppImage into `/opt/prettyzap` so users do
 not need AppImage FUSE support at runtime. The launcher and desktop entry are

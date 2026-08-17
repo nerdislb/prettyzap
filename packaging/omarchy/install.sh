@@ -12,9 +12,7 @@ set -euo pipefail
 #
 #   install.sh [--plugin] [--standalone] [--uninstall] [--section <left|center|right>]
 #
-# From the repo checkout this uses ./plugin and ./standalone. The AUR wrapper
-# (prettyzap-omarchy-setup) overrides PZ_PLUGIN_SRC / PZ_STANDALONE_SRC with
-# the packaged paths under /usr/share/prettyzap.
+# From the repo checkout this uses ./plugin and ./standalone.
 
 PLUGIN_ID="prettyletto.prettyzap"
 

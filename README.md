@@ -62,12 +62,14 @@ Install the core package from the AUR:
 paru -S prettyzap-bin
 ```
 
-For the optional Omarchy/Quickshell integration:
+For Omarchy, add the native bar plugin directly from GitHub:
 
 ```bash
-paru -S prettyzap-omarchy
-prettyzap-omarchy-setup --plugin
+omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 ```
+
+Open the PrettyZap bar icon and choose **Install PrettyZap** if the core app
+is not already installed.
 
 ### From an AppImage
 
