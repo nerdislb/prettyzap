@@ -57,6 +57,17 @@ Open the PrettyZap bar panel and click **Install PrettyZap**. It installs the
 updates automatically once the command is available; it does not restart the
 Omarchy shell.
 
+## Uninstall
+
+Use the plugin's own command to remove both PrettyZap and its Omarchy widget:
+
+```bash
+~/.config/omarchy/plugins/prettyletto.prettyzap/install.sh --uninstall
+```
+
+This preserves your local settings and WhatsApp Web session. To also remove
+that data for a completely clean install, use `--purge` instead.
+
 From a checked-out plugin directory, run the same setup manually with:
 
 ```bash
