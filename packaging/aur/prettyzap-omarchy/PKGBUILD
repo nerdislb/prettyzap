@@ -25,7 +25,6 @@ source=('LICENSE'
         'plugin-Widget.qml'
         'plugin-Data.qml'
         'plugin-README.md'
-        'plugin-prettyzap-widget.png'
         'plugin-prettyzap-widget-dark.png'
         'plugin-prettyzap-widget-light.png'
         'plugin-prettyzap.svg'
@@ -41,7 +40,6 @@ sha256sums=('e1353e4dde193ae18c47ba11139aad7e907f4609ae23e866d206e1d01e9f37b3'
             'fc5cee8225c8acc48d6433170d68e0c2d8cb10c0dd9e67fda479337c935ece9e'
             '9feb726abbc78f55dafb0a89131d3de0ca75f6f7cbb22445d9b208f5cc12c42f'
             'c4cd45d43c9d4f2e7104ed9de18e5a43f1b4360cb407bd5b503885cf34d44131'
-            'cac6ab3033ca84247a0da8776dc75aed34345b60311fc54039c99306c390168a'
             '890c081711bc0e78638bd22e62b54c224173264e41892ae06eb66d77dbf0bc0c'
             'f2179968ee9e518e6c2ca724bb07f6f6d76305a89bcb157294c0348266113d70'
             'dc32d09b142dec2ace99bafae3f9e374e863c70d64e529ad815ac6ba51eb605a'
@@ -67,7 +65,6 @@ package() {
   install -Dm0644 "${srcdir}/plugin-Widget.qml" "${pdir}/Widget.qml"
   install -Dm0644 "${srcdir}/plugin-Data.qml" "${pdir}/Data.qml"
   install -Dm0644 "${srcdir}/plugin-README.md" "${pdir}/README.md"
-  install -Dm0644 "${srcdir}/plugin-prettyzap-widget.png" "${pdir}/assets/prettyzap-widget.png"
   install -Dm0644 "${srcdir}/plugin-prettyzap-widget-dark.png" "${pdir}/assets/prettyzap-widget-dark.png"
   install -Dm0644 "${srcdir}/plugin-prettyzap-widget-light.png" "${pdir}/assets/prettyzap-widget-light.png"
   install -Dm0644 "${srcdir}/plugin-prettyzap.svg" "${pdir}/assets/prettyzap.svg"
