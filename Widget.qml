@@ -191,7 +191,10 @@ BarWidget {
         }
       }
 
-      PanelSeparator { foreground: root.foreground }
+      PanelSeparator {
+        visible: data.installed
+        foreground: root.foreground
+      }
 
       Button {
         width: parent.width
@@ -211,6 +214,7 @@ BarWidget {
 
       Button {
         width: parent.width
+        visible: data.installed
         text: "Settings"
         iconText: "󰒓"
         leftAlign: true
@@ -220,6 +224,7 @@ BarWidget {
 
       Button {
         width: parent.width
+        visible: data.installed
         text: "Colors…"
         iconText: "󰏘"
         leftAlign: true
@@ -229,6 +234,7 @@ BarWidget {
 
       Button {
         width: parent.width
+        visible: data.installed
         text: data.theme === "system" ? "Use WhatsApp theme" : "Use System theme"
         iconText: "󰔎"
         leftAlign: true
@@ -239,6 +245,7 @@ BarWidget {
 
       Button {
         width: parent.width
+        visible: data.installed
         text: data.notificationsEnabled ? "Disable notifications" : "Enable notifications"
         iconText: data.notificationsEnabled ? "󰂛" : "󰂚"
         leftAlign: true
@@ -249,6 +256,7 @@ BarWidget {
 
       Button {
         width: parent.width
+        visible: data.installed
         text: "Quit PrettyZap"
         iconText: "󰗼"
         leftAlign: true
