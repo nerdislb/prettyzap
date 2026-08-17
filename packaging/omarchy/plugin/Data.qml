@@ -137,7 +137,11 @@ Item {
   Process {
     id: whichProc
     running: false
-    command: ["sh", "-c", "command -v prettyzap >/dev/null 2>&1"]
+    // `command -v` alone accepts a broken symlink left behind by a removed
+    // AppImage. Resolve the command and require its final target to be
+    // executable before showing launch controls.
+    command: ["sh", "-c",
+      'p=$(command -v prettyzap 2>/dev/null) || exit 1; p=$(readlink -f "$p" 2>/dev/null || printf %s "$p"); test -x "$p"']
     onExited: (code) => root.installed = code === 0
   }
 
