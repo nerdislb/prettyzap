@@ -45,6 +45,13 @@ import {
 
 app.setName("PrettyZap");
 
+// WhatsApp Web's Chromium GPU process can consume several hundred megabytes
+// on some Linux/Wayland systems. Keep the wrapper's default footprint lower
+// and make GPU rendering an explicit opt-in for users who need it for calls
+// or video playback. This must be set before Electron creates any windows.
+const gpuEnabled = process.env.PRETTYZAP_ENABLE_GPU === "1" || process.argv.includes("--enable-gpu");
+if (!gpuEnabled) app.commandLine.appendSwitch("disable-gpu");
+
 // Keep the existing profile created by the earlier Pjzap builds. The product
 // is now named PrettyZap, but changing Electron's userData directory would
 // unnecessarily discard the user's existing WhatsApp Web session.

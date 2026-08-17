@@ -160,6 +160,30 @@ npm test             # build and run the tests
 npm run package:linux  # build a Linux AppImage
 ```
 
+### GPU and memory usage
+
+PrettyZap disables Chromium GPU acceleration by default. WhatsApp Web can
+cause Electron's GPU process to reserve several hundred megabytes on some
+Linux/Wayland systems, while the wrapper's UI and normal messaging remain
+usable without GPU rendering. Disabling it is intended to reduce the default
+memory footprint.
+
+GPU acceleration can be enabled for troubleshooting, video playback, or
+voice/video calls:
+
+```bash
+PRETTYZAP_ENABLE_GPU=1 prettyzap
+```
+
+The equivalent one-shot override is:
+
+```bash
+prettyzap --enable-gpu
+```
+
+GPU acceleration may improve media rendering on some systems, but can also
+increase memory usage substantially.
+
 The implementation notes are in [`src/features/README.md`](src/features/README.md)
 and [`src/main/README.md`](src/main/README.md).
 

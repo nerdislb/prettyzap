@@ -5,7 +5,7 @@
 # shell on the Electron version it was tested with across Arch derivatives.
 
 pkgname=prettyzap-bin
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=2
 pkgdesc='Keyboard-first Electron shell around WhatsApp Web'
 arch=('x86_64')
