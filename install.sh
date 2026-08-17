@@ -8,6 +8,12 @@ set -euo pipefail
 PLUGIN_ID="prettyletto.prettyzap"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
+# `omarchy plugin` needs this when invoked from a terminal that did not inherit
+# the compositor's environment (for example a user shell or an installer).
+if [[ -z ${OMARCHY_PATH:-} && -d "$HOME/.local/share/omarchy" ]]; then
+  export OMARCHY_PATH="$HOME/.local/share/omarchy"
+fi
+
 uninstall() {
   local purge_data="$1"
 
