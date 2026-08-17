@@ -81,6 +81,3 @@ if ! command -v prettyzap >/dev/null 2>&1; then
   echo "error: prettyzap-bin completed but the prettyzap command was not found." >&2
   exit 1
 fi
-
-echo "PrettyZap is ready. Starting it now…"
-setsid uwsm-app -- prettyzap >/dev/null 2>&1 &
