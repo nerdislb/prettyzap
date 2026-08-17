@@ -29,15 +29,10 @@ hiding, theming, and quitting PrettyZap.
 
 ## Install
 
-Install PrettyZap separately from the AUR:
+Install PrettyZap and the Omarchy bar plugin:
 
 ```bash
 yay -S --needed prettyzap-bin
-```
-
-On Omarchy, add the bar plugin separately:
-
-```bash
 omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 ```
 
