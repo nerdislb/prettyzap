@@ -10,6 +10,14 @@ BarWidget {
   moduleName: "prettyletto.prettyzap"
   property bool popupOpen: false
   readonly property color foreground: bar ? bar.foreground : Color.foreground
+  // Omarchy's bar API exposes live palette colors rather than a boolean theme
+  // flag. The bar background is the most reliable light/dark signal and
+  // re-evaluates automatically when the active Omarchy theme changes.
+  readonly property bool isDark: {
+    var surface = bar ? bar.background : Color.background
+    var luminance = (0.2126 * surface.r) + (0.7152 * surface.g) + (0.0722 * surface.b)
+    return luminance < 0.5
+  }
 
   function open() { popupOpen = true }
   function close() { popupOpen = false }
@@ -46,16 +54,20 @@ BarWidget {
   implicitWidth: Style.bar.statusSlot
   implicitHeight: barSize
 
-  // Icon surface: the declared `icon` setting switches between the PrettyZap
-  // brand mark (assets/prettyzap.svg) and the WhatsApp glyph (default).
+  // Icon surface: the declared `icon` setting switches between the themed
+  // PrettyZap brand mark and the WhatsApp glyph.
   property bool showBrand: false
 
   Image {
     visible: root.showBrand
     anchors.centerIn: parent
-    width: Style.bar.iconFont
-    height: Style.bar.iconFont
-    source: Qt.resolvedUrl("assets/prettyzap.svg")
+    // The supplied mark has transparent padding, so give it a larger surface
+    // than the text glyph while keeping it within the bar's vertical bounds.
+    width: Math.min(barSize, Style.space(24))
+    height: Math.min(barSize, Style.space(24))
+    source: Qt.resolvedUrl(root.isDark
+      ? "assets/prettyzap-widget-dark.png"
+      : "assets/prettyzap-widget-light.png")
     sourceSize.width: 32
     sourceSize.height: 32
     fillMode: Image.PreserveAspectFit
@@ -64,10 +76,36 @@ BarWidget {
   Text {
     visible: !root.showBrand
     anchors.centerIn: parent
-    text: "\uf075"
-    color: root.foreground
+    text: "󰖣"
+    color: "#3b82f6"
+    opacity: data.running ? 0.16 : 0
+    scale: 1.55
     font.family: root.bar ? root.bar.fontFamily : Style.font.family
-    font.pixelSize: Style.bar.iconFont
+    font.pixelSize: Style.bar.iconFont + Style.space(2)
+    horizontalAlignment: Text.AlignHCenter
+    verticalAlignment: Text.AlignVCenter
+  }
+
+  Text {
+    visible: !root.showBrand
+    anchors.centerIn: parent
+    text: "󰖣"
+    color: "#60a5fa"
+    opacity: data.running ? 0.28 : 0
+    scale: 1.24
+    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+    font.pixelSize: Style.bar.iconFont + Style.space(2)
+    horizontalAlignment: Text.AlignHCenter
+    verticalAlignment: Text.AlignVCenter
+  }
+
+  Text {
+    visible: !root.showBrand
+    anchors.centerIn: parent
+    text: "󰖣"
+    color: data.running ? "#bfdbfe" : root.foreground
+    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+    font.pixelSize: Style.bar.iconFont + Style.space(2)
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
   }
@@ -93,18 +131,6 @@ BarWidget {
       font.pixelSize: data.unreadCount >= 100 ? 7 : 8
       font.bold: true
     }
-  }
-
-  Rectangle {
-    visible: data.notificationControlReady
-    anchors.left: parent.left
-    anchors.bottom: parent.bottom
-    width: Style.space(9)
-    height: Style.space(9)
-    radius: width / 2
-    color: data.notificationsEnabled ? "#22c55e" : "#ef4444"
-    border.color: root.foreground
-    border.width: 1
   }
 
   MouseArea {
@@ -135,7 +161,7 @@ BarWidget {
         Text {
           width: Style.space(36)
           height: Style.space(36)
-          text: "\uf075"
+          text: "󰖣"
           color: root.foreground
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.title

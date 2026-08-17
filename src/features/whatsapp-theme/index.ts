@@ -14,6 +14,8 @@ export interface WhatsAppThemeController {
   toggle(): void;
   setMode(mode: WhatsAppThemeMode): void;
   getMode(): WhatsAppThemeMode;
+  /** Return the palette most recently applied to WhatsApp Web. */
+  getCurrentPalette(): OmarchyPalette | undefined;
   /** Re-read the palette file and re-apply the stylesheet (tweaker saves). */
   refreshPalette(): void;
   dispose(): void;
@@ -347,6 +349,7 @@ export function installWhatsAppTheme(
   // The 1s palette poll uses this to re-apply after a skipped initial pass
   // instead of wrongly assuming the first document pass installed it.
   let appliedOnce = false;
+  let currentPalette: OmarchyPalette | undefined;
 
   const removeStylesheet = async (): Promise<void> => {
     const key = stylesheetKey;
@@ -363,6 +366,7 @@ export function installWhatsAppTheme(
     if (disposed || webContents.isDestroyed() || stylesheetKey) return;
     const palette = await loadPalette(sources, isCustomPaletteActive);
     if (!palette || disposed || webContents.isDestroyed()) return;
+    currentPalette = palette;
     try {
       stylesheetKey = await webContents.insertCSS(createSystemThemeCss(palette));
     } catch (error: unknown) {
@@ -529,6 +533,7 @@ export function installWhatsAppTheme(
     toggle: () => setMode(mode === "system" ? "whatsapp" : "system"),
     setMode,
     getMode: () => mode,
+    getCurrentPalette: () => currentPalette,
     refreshPalette: () => {
       if (disposed || !documentReady) return;
       scheduleThemeRefresh();

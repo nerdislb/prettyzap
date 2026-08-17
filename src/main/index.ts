@@ -895,14 +895,16 @@ ipcMain.handle(PALETTE_PIN_CHANNEL, (event, value: unknown) => {
   if (!isSettingsSender(event)) return null;
   const pinned = value === true;
   if (pinned) {
-    // "Keep these colors even when the theme changes": snapshot the current
-    // theme into the custom file so pinning never starts from an empty state.
-    if (!readPrettyZapPalette()) {
-      const underOmarchy = isRunningUnderOmarchy();
-      writePrettyZapPalette(readOmarchyPalette() ?? DEFAULT_CUSTOM_PALETTE);
-      if (underOmarchy && whatsappThemeController?.getMode() !== "system") {
-        whatsappThemeController?.setMode("system");
-      }
+    // "Keep these colors even when the theme changes": always replace any
+    // previous custom snapshot with the palette currently applied to
+    // WhatsApp. Reusing an old colors.toml here can restore a stale/default
+    // palette after the user has changed the Omarchy theme or unpinned once.
+    const currentPalette = whatsappThemeController?.getCurrentPalette();
+    const paletteToPin = currentPalette ?? readOmarchyPalette() ?? readPrettyZapPalette() ?? DEFAULT_CUSTOM_PALETTE;
+    writePrettyZapPalette(paletteToPin);
+    const underOmarchy = isRunningUnderOmarchy();
+    if (underOmarchy && whatsappThemeController?.getMode() !== "system") {
+      whatsappThemeController?.setMode("system");
     }
     shellState.colorsPinned = true;
     scheduleShellStateSave();

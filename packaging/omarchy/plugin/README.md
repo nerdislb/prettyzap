@@ -13,9 +13,9 @@ widget there.
 
 ## What it shows
 
-- **Bar icon** — the PrettyZap logo (or the WhatsApp glyph when the SVG cannot
-  load, or when `icon` is set to `glyph`). It lights up (`active`) while the
-  app is running.
+- **Bar icon** — the supplied white PrettyZap mark on dark Omarchy themes and
+  black mark on light themes (or the WhatsApp glyph when `icon` is set to
+  `glyph`). The active icon follows Omarchy's live bar palette.
 - **Left-click** — open PrettyZap, or hide it if it is already visible.
 - **Middle-click** — open the PrettyZap settings window.
 - **Right-click** — open the popup panel.
@@ -36,7 +36,7 @@ widget there.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `launchCommand` | string | `uwsm-app -- prettyzap` | How the app is launched. Split on spaces. Set to `prettyzap` on desktops without `uwsm-app`. |
-| `icon` | string | `brand` | `brand` (PrettyZap logo) or `glyph` (WhatsApp symbol). |
+| `icon` | string | `brand` | `brand` (theme-aware PrettyZap logo) or `glyph` (WhatsApp symbol). |
 
 ```bash
 omarchy bar set prettyletto.prettyzap icon glyph
