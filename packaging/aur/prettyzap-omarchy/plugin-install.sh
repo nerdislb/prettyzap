@@ -29,5 +29,10 @@ if ! command -v prettyzap >/dev/null 2>&1; then
   exit 1
 fi
 
+if command -v omarchy >/dev/null 2>&1; then
+  echo "Refreshing the Omarchy shell…"
+  omarchy restart shell || echo "note: shell restart did not complete; run: omarchy restart shell"
+fi
+
 echo "PrettyZap is ready. Starting it now…"
 setsid uwsm-app -- prettyzap >/dev/null 2>&1 &
