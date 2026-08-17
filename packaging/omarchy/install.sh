@@ -16,6 +16,12 @@ set -euo pipefail
 
 PLUGIN_ID="prettyletto.prettyzap"
 
+# Make Omarchy's shell commands work when this script is run from a terminal
+# that did not inherit the compositor's environment.
+if [[ -z ${OMARCHY_PATH:-} && -d "$HOME/.local/share/omarchy" ]]; then
+  export OMARCHY_PATH="$HOME/.local/share/omarchy"
+fi
+
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PZ_PLUGIN_SRC="${PZ_PLUGIN_SRC:-$BASE_DIR/plugin}"
 PZ_STANDALONE_SRC="${PZ_STANDALONE_SRC:-$BASE_DIR/standalone}"
