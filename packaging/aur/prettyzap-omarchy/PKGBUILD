@@ -10,7 +10,7 @@
 
 pkgname=prettyzap-omarchy
 pkgver=0.2.0
-pkgrel=2
+pkgrel=3
 pkgdesc='Native Omarchy Quattro bar integration for PrettyZap with optional standalone fallback'
 arch=('any')
 url='https://github.com/prettyletto/prettyzap'
@@ -38,7 +38,7 @@ sha256sums=('e1353e4dde193ae18c47ba11139aad7e907f4609ae23e866d206e1d01e9f37b3'
             '8ddb13fcb770ef1546e9c9cc6f1a3e4e8627adb765a533c31488e4b1d9864219'
             '73cef8ff13e88ca274fab684120693e76fcf17d6daa3f543a5ab86df166aad87'
             'bb4cc703fecea9b2f5d6cef28da33d6a2e0a8a54664a7ffcc27432af6c251c86'
-            '395a561247049ab3539d283e1f064205c069c7b910d5b236e5fac931eb540d33'
+            'e315fde32f93dc8ac0e1945f448fbe93a9ad03adc71c48e992ed33e05ccb69bb'
             'd2e09dd455c343a23201531f1b0f23bcfcce9bef322c6740e4f1a85707260762'
             'fbad7769cdad953a1f23ec8f3c1dbe05090d399b3b6b10fc6265c768eb098560'
             '404bb9a6878783dea7573f835e9f4b84894a8a6f8d7b1960e0c3fad202665e1d'
