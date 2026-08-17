@@ -32,11 +32,17 @@ packaging/omarchy/
 ./packaging/omarchy/install.sh              # plugin (default)
 ./packaging/omarchy/install.sh --standalone # explicit non-Omarchy fallback
 ./packaging/omarchy/install.sh --uninstall  # remove both
+./packaging/omarchy/install.sh --section center  # place the icon on that bar side
 ```
 
 The plugin install copies `plugin/` to
 `~/.config/omarchy/plugins/prettyletto.prettyzap/`, rescans plugins, and runs
-`omarchy plugin enable prettyletto.prettyzap` (places it at the right section).
+`omarchy plugin enable prettyletto.prettyzap <section>`. `install.sh` asks you
+where the icon should sit (left/center/right, default right); pass
+`--section` to skip the prompt, or set `PZ_BAR_SECTION=left` for
+automated/package-manager runs. The position is just the normal Omarchy
+placement — change it later with `omarchy plugin enable prettyletto.prettyzap
+<left|center|right>`.
 
 ### 2. AUR
 

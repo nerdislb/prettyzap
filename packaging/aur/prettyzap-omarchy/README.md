@@ -24,12 +24,15 @@ Package installation does not edit `~/.config/omarchy/shell.json`,
 prettyzap-omarchy-setup            # install + enable the Omarchy bar widget
 prettyzap-omarchy-setup --standalone   # install the standalone Quickshell widget
 prettyzap-omarchy-setup --uninstall    # remove both
+prettyzap-omarchy-setup --section center  # pick left, center, or right
 ```
 
 `--plugin` is the default. It copies the widget into
 `~/.config/omarchy/plugins/prettyletto.prettyzap/` and runs Omarchy's own
 additive `omarchy plugin enable` — exactly one entry joins one bar section,
-nothing else in your `shell.json` changes.
+nothing else in your `shell.json` changes. `install.sh` asks which side of the
+bar you want the icon on (default right); `--section left|center|right` or the
+`PZ_BAR_SECTION` environment variable skip the prompt for scripted installs.
 
 The standalone widget is installed to `~/.config/quickshell/prettyzap/` and
 run with `quickshell -p ~/.config/quickshell/prettyzap`.
