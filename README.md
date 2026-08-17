@@ -29,17 +29,20 @@ hiding, theming, and quitting PrettyZap.
 
 ## Install
 
-Install PrettyZap from the AUR:
+Install PrettyZap separately from the AUR:
 
 ```bash
 yay -S --needed prettyzap-bin
 ```
 
-On Omarchy, add the bar plugin:
+On Omarchy, add the bar plugin separately:
 
 ```bash
 omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 ```
+
+The plugin only checks whether the `prettyzap` command is installed; it never
+installs packages or runs an installer on your behalf.
 
 The plugin adds a bar icon. Left-click opens or hides PrettyZap, middle-click
 opens settings, and right-click opens the control panel.
@@ -60,17 +63,18 @@ Keyboard shortcuts include:
 
 ## Uninstall
 
-Remove both the AUR package and the Omarchy plugin while keeping settings and
-the WhatsApp session:
+Remove the AUR package and the Omarchy plugin while keeping settings and the
+WhatsApp session:
 
 ```bash
-~/.config/omarchy/plugins/prettyletto.prettyzap/install.sh --uninstall
+yay -Rns prettyzap-bin
+omarchy plugin remove prettyletto.prettyzap --yes
 ```
 
 To also remove PrettyZap settings and session data:
 
 ```bash
-~/.config/omarchy/plugins/prettyletto.prettyzap/install.sh --purge
+rm -rf ~/.config/prettyzap ~/.config/pjzap
 ```
 
 ## License

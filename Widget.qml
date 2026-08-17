@@ -198,17 +198,38 @@ BarWidget {
 
       Button {
         width: parent.width
-        text: !data.installed
-          ? (data.installing ? "Opening installer…" : "Install PrettyZap")
-          : data.appVisible ? "Hide PrettyZap" : "Open PrettyZap"
-        iconText: !data.installed ? "󰐕" : data.appVisible ? "󰍃" : "󰖰"
+        visible: data.installed
+        text: data.appVisible ? "Hide PrettyZap" : "Open PrettyZap"
+        iconText: data.appVisible ? "󰍃" : "󰖰"
         leftAlign: true
         foreground: root.foreground
-        enabled: !data.installing
         onClicked: {
-          if (!data.installed) data.install()
-          else root.toggleApp()
+          root.toggleApp()
           root.close()
+        }
+      }
+
+      Column {
+        visible: !data.installed
+        width: parent.width
+        spacing: Style.space(6)
+
+        Text {
+          width: parent.width
+          text: "PrettyZap is not installed. Install it manually from the AUR, then reopen the app:"
+          color: root.foreground
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          wrapMode: Text.WordWrap
+        }
+
+        Text {
+          width: parent.width
+          text: "yay -S --needed prettyzap-bin"
+          color: root.foreground
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          wrapMode: Text.WrapAnywhere
         }
       }
 
