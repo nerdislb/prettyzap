@@ -10,7 +10,7 @@
 
 pkgname=prettyzap-omarchy
 pkgver=0.2.0
-pkgrel=1
+pkgrel=2
 pkgdesc='Native Omarchy Quattro bar integration for PrettyZap with optional standalone fallback'
 arch=('any')
 url='https://github.com/prettyletto/prettyzap'
@@ -25,6 +25,7 @@ source=('LICENSE'
         'plugin-Widget.qml'
         'plugin-Data.qml'
         'plugin-README.md'
+        'plugin-install.sh'
         'plugin-prettyzap-widget-dark.png'
         'plugin-prettyzap-widget-light.png'
         'plugin-prettyzap.svg'
@@ -37,9 +38,10 @@ sha256sums=('e1353e4dde193ae18c47ba11139aad7e907f4609ae23e866d206e1d01e9f37b3'
             '8ddb13fcb770ef1546e9c9cc6f1a3e4e8627adb765a533c31488e4b1d9864219'
             '73cef8ff13e88ca274fab684120693e76fcf17d6daa3f543a5ab86df166aad87'
             'bb4cc703fecea9b2f5d6cef28da33d6a2e0a8a54664a7ffcc27432af6c251c86'
-            'fc5cee8225c8acc48d6433170d68e0c2d8cb10c0dd9e67fda479337c935ece9e'
-            '9feb726abbc78f55dafb0a89131d3de0ca75f6f7cbb22445d9b208f5cc12c42f'
-            'c4cd45d43c9d4f2e7104ed9de18e5a43f1b4360cb407bd5b503885cf34d44131'
+            '68b3b7612ed90b3a0e21a813458d8a744e3e2ce3ece618dfe0a8a75f4c105d7c'
+            'e9c581ce83ca34f2eec61e70368dd49461402024d9fe4f934b2ca640b0779398'
+            'fbad7769cdad953a1f23ec8f3c1dbe05090d399b3b6b10fc6265c768eb098560'
+            '404bb9a6878783dea7573f835e9f4b84894a8a6f8d7b1960e0c3fad202665e1d'
             '890c081711bc0e78638bd22e62b54c224173264e41892ae06eb66d77dbf0bc0c'
             'f2179968ee9e518e6c2ca724bb07f6f6d76305a89bcb157294c0348266113d70'
             'dc32d09b142dec2ace99bafae3f9e374e863c70d64e529ad815ac6ba51eb605a'
@@ -65,6 +67,7 @@ package() {
   install -Dm0644 "${srcdir}/plugin-Widget.qml" "${pdir}/Widget.qml"
   install -Dm0644 "${srcdir}/plugin-Data.qml" "${pdir}/Data.qml"
   install -Dm0644 "${srcdir}/plugin-README.md" "${pdir}/README.md"
+  install -Dm0755 "${srcdir}/plugin-install.sh" "${pdir}/install.sh"
   install -Dm0644 "${srcdir}/plugin-prettyzap-widget-dark.png" "${pdir}/assets/prettyzap-widget-dark.png"
   install -Dm0644 "${srcdir}/plugin-prettyzap-widget-light.png" "${pdir}/assets/prettyzap-widget-light.png"
   install -Dm0644 "${srcdir}/plugin-prettyzap.svg" "${pdir}/assets/prettyzap.svg"

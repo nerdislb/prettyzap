@@ -113,7 +113,9 @@ plugin with:
 omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 ```
 
-Left-click opens or hides PrettyZap. Right-click opens the control panel.
+Open the bar panel and click **Install PrettyZap** once to install
+`prettyzap-bin` through `yay`; after that, left-click opens or hides the app
+and right-click opens the control panel.
 See [`packaging/omarchy/README.md`](packaging/omarchy/README.md) for the
 local checkout installer, standalone Quickshell fallback, and uninstall
 instructions.

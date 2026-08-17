@@ -20,7 +20,8 @@ Item {
   // host widget overrides this from its `launchCommand` setting.
   property string launchCommand: Quickshell.env("PRETTYZAP_LAUNCH_COMMAND") || "uwsm-app -- prettyzap"
   property bool running: false
-  property bool installed: true
+  property bool installed: false
+  property bool installing: false
   property string theme: "" // "whatsapp" | "system" | "" while unknown
   property int pid: 0
   property bool appVisible: false
@@ -141,6 +142,29 @@ Item {
   }
 
   function checkInstalled() { whichProc.running = true }
+
+  // yay needs a visible terminal for its sudo password prompt. The Omarchy
+  // launcher uses the user's selected terminal and keeps output visible.
+  readonly property string installerPath:
+    decodeURIComponent(String(Qt.resolvedUrl("install.sh")).replace(/^file:\/\//, ""))
+
+  Process {
+    id: installProc
+    running: false
+    command: ["sh", "-c",
+      'exec omarchy-launch-floating-terminal-with-presentation "bash \\\"$1\\\""',
+      "prettyzap-install", root.installerPath]
+    onStarted: root.installing = true
+    onExited: (code) => {
+      root.installing = false
+      root.checkInstalled()
+      if (code !== 0) console.warn("PrettyZap installer exited", code)
+    }
+  }
+
+  function install() {
+    if (!root.installing) installProc.running = true
+  }
 
   readonly property string busName: "org.prettyzap.Desktop"
   readonly property string objectPath: "/org/prettyzap/Desktop"

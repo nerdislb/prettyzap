@@ -194,11 +194,18 @@ BarWidget {
 
       Button {
         width: parent.width
-        text: data.appVisible ? "Hide PrettyZap" : "Open PrettyZap"
-        iconText: data.appVisible ? "󰍃" : "󰖰"
+        text: !data.installed
+          ? (data.installing ? "Opening installer…" : "Install PrettyZap")
+          : data.appVisible ? "Hide PrettyZap" : "Open PrettyZap"
+        iconText: !data.installed ? "󰐕" : data.appVisible ? "󰍃" : "󰖰"
         leftAlign: true
         foreground: root.foreground
-        onClicked: { root.toggleApp(); root.close() }
+        enabled: !data.installing
+        onClicked: {
+          if (!data.installed) data.install()
+          else root.toggleApp()
+          root.close()
+        }
       }
 
       Button {

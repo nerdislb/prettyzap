@@ -40,8 +40,8 @@ check_pair plugin/manifest.json plugin-manifest.json
 check_pair plugin/Widget.qml plugin-Widget.qml
 check_pair plugin/Data.qml plugin-Data.qml
 check_pair plugin/README.md plugin-README.md
+check_pair plugin/install.sh plugin-install.sh
 check_pair plugin/assets/prettyzap.svg plugin-prettyzap.svg
-check_pair plugin/assets/prettyzap-widget.png plugin-prettyzap-widget.png
 check_pair plugin/assets/prettyzap-widget-light.png plugin-prettyzap-widget-light.png
 check_pair plugin/assets/prettyzap-widget-dark.png plugin-prettyzap-widget-dark.png
 check_pair standalone/shell.qml standalone-shell.qml

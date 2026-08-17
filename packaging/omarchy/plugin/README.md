@@ -6,10 +6,11 @@ app, and a popup panel offers Open / Hide, Settings, the WhatsApp/System theme
 toggle, unread count, and notification mute control.
 
 The widget is **purely additive**: enabling it adds a single entry to one bar
-section. Nothing else in `~/.config/omarchy/shell.json` is touched, and the
-widget never edits user configuration on its own. It is the only PrettyZap
-control surface intended for Omarchy Quattro; do not start the standalone
-widget there.
+section. Nothing else in `~/.config/omarchy/shell.json` is touched. If the
+PrettyZap app is missing, the panel offers an explicit **Install PrettyZap**
+button that runs `yay -S --needed prettyzap-bin` in a visible terminal. It is
+the only PrettyZap control surface intended for Omarchy Quattro; do not start
+the standalone widget there.
 
 ## What it shows
 
@@ -45,16 +46,19 @@ omarchy bar set prettyletto.prettyzap launchCommand prettyzap
 
 ## Install
 
-From the repo (does not touch the rest of the bar):
-
-```bash
-./packaging/omarchy/install.sh            # copies + enables the plugin
-```
-
-Or directly from the PrettyZap repository's plugin branch:
+Install directly from the PrettyZap repository's plugin branch:
 
 ```bash
 omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
+```
+
+Open the PrettyZap bar panel and click **Install PrettyZap**. It installs the
+`prettyzap-bin` AUR package through `yay`, then launches the app.
+
+From a checked-out plugin directory, run the same setup manually with:
+
+```bash
+./install.sh
 ```
 
 Or, by hand:
@@ -69,8 +73,8 @@ omarchy plugin enable prettyletto.prettyzap
 ## Requirements
 
 - Omarchy (omarchy-shell) or a Quickshell setup with the `qs.Ui` component kit
-- PrettyZap installed (`prettyzap` on PATH) — the widget shows a hint when it
-  is missing
+- `yay` is required only when installing PrettyZap from the panel. Otherwise
+  install `prettyzap-bin` yourself before using the widget.
 
 ## Notes
 
