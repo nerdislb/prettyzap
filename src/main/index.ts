@@ -838,8 +838,12 @@ ipcMain.on(WHATSAPP_UNREAD_CHANNEL, (event, value: unknown) => {
   updateUnreadCount(value);
 });
 
-ipcMain.handle(SETTINGS_GET_CHANNEL, () => settingsSnapshot());
-ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (_event, value: unknown) => {
+ipcMain.handle(SETTINGS_GET_CHANNEL, (event) => {
+  if (!isSettingsSender(event)) return null;
+  return settingsSnapshot();
+});
+ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (event, value: unknown) => {
+  if (!isSettingsSender(event)) return null;
   if (!value || typeof value !== "object") return settingsSnapshot();
   const candidate = value as Partial<ShellState>;
   if (typeof candidate.drawerCollapsed === "boolean") shellState.drawerCollapsed = candidate.drawerCollapsed;
