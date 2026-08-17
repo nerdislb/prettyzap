@@ -11,7 +11,8 @@ omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 The plugin is additive: enabling it adds one bar entry and does not rewrite
 the user's `shell.json`. If the desktop app is absent, left-click the bar icon
 and choose **Install PrettyZap**; the visible installer runs
-`yay -S --needed prettyzap-bin`, refreshes the shell, and starts the app.
+`yay -S --needed prettyzap-bin` and starts the app. The bar panel detects the
+new command automatically; no shell restart is needed.
 
 For local development, `install.sh` copies `plugin/` into the user plugin
 directory. `standalone/` is retained only as an explicit Quickshell fallback

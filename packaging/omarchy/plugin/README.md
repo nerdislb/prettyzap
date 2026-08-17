@@ -53,8 +53,9 @@ omarchy plugin add https://github.com/prettyletto/prettyzap.git --enable --yes
 ```
 
 Open the PrettyZap bar panel and click **Install PrettyZap**. It installs the
-`prettyzap-bin` AUR package through `yay`, refreshes Omarchy's shell, then
-launches the app.
+`prettyzap-bin` AUR package through `yay` and launches the app. The bar
+updates automatically once the command is available; it does not restart the
+Omarchy shell.
 
 From a checked-out plugin directory, run the same setup manually with:
 
