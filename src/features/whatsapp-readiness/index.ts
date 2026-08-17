@@ -67,16 +67,27 @@ function createShellStateScript(timeoutMs: number): string {
     let settled = false;
     let observer;
     let timeout;
+    let pollTimer;
+    let frame = 0;
     const finish = (state) => {
       if (settled) return;
       settled = true;
       observer?.disconnect();
       clearTimeout(timeout);
+      clearInterval(pollTimer);
+      if (frame) cancelAnimationFrame(frame);
       resolve(state);
     };
     const check = () => {
-      const state = inspect();
-      if (state.ready) finish(state);
+      // Collapse mutation bursts into one check per frame. WhatsApp's boot
+      // emits thousands of mutations; running layout reads on every single
+      // one slows the very boot we are waiting for.
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const state = inspect();
+        if (state.ready) finish(state);
+      });
     };
     const initial = inspect();
     if (initial.ready) {
@@ -84,19 +95,28 @@ function createShellStateScript(timeoutMs: number): string {
       return;
     }
     observer = new MutationObserver(check);
-    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    // Visibility can flip via style attribute changes that a childList-only
+    // observer misses; a cheap poll covers that without a whole-document
+    // attribute watch that would fire on every mutation.
+    pollTimer = setInterval(() => {
+      const state = inspect();
+      if (state.ready) finish(state);
+    }, 1000);
     timeout = setTimeout(() => finish(inspect()), ${timeoutMs});
   }))()`;
 }
 
 /**
- * Resolves only after WhatsApp has painted the authenticated chat shell, or
- * returns its structural state on timeout. This deliberately records no chat
- * content, message text, or account data.
+ * Resolves once WhatsApp has painted the authenticated chat shell, or returns
+ * its structural state after a short window. Callers are expected to re-poll:
+ * after a fresh login or a slow reconnect the shell can appear minutes after
+ * the page loaded. This deliberately records no chat content, message text,
+ * or account data.
  */
 export async function waitForWhatsAppShell(
   webContents: WebContents,
-  timeoutMs = 30_000,
+  timeoutMs = 4_000,
 ): Promise<WhatsAppShellState> {
   return webContents.executeJavaScript(createShellStateScript(timeoutMs)) as Promise<WhatsAppShellState>;
 }

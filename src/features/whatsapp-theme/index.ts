@@ -1,6 +1,9 @@
 import type { WebContents } from "electron";
 import * as fs from "node:fs";
-import { waitForWhatsAppShell } from "../whatsapp-readiness";
+import {
+  waitForWhatsAppShell,
+  type WhatsAppShellState,
+} from "../whatsapp-readiness";
 import {
   parsePalette,
   resolvePaletteSources,
@@ -416,28 +419,35 @@ export function installWhatsAppTheme(
   const onFinishedLoad = (): void => {
     documentReady = true;
     const generation = ++loadGeneration;
-    // The chat shell is often not ready on the first ever load after a fresh
-    // login or a slow reconnect, and the post-login transition can happen
-    // without a new did-finish-load. Retry until the shell appears instead of
-    // giving up permanently (previous builds left the palette unapplied
-    // until a manual reload).
-    const attempt = (remaining: number): void => {
+    // Unbounded retry, same rationale as the drawer installer: after a fresh
+    // login or slow reconnect the chat shell can appear minutes after the
+    // last page load and without a new did-finish-load, so keep polling
+    // instead of giving up after a fixed budget (previous builds left the
+    // palette unapplied until a manual reload).
+    const attempt = (): void => {
       queue(async () => {
-        const state = await waitForWhatsAppShell(webContents);
+        if (disposed || generation !== loadGeneration || !documentReady || webContents.isDestroyed()) return;
+        let state: WhatsAppShellState;
+        try {
+          state = await waitForWhatsAppShell(webContents);
+        } catch (error: unknown) {
+          // A navigation can tear down the JS context mid-wait; that is a
+          // property of the current pass, not the feature.
+          if (disposed || generation !== loadGeneration || !documentReady || webContents.isDestroyed()) return;
+          console.warn("PrettyZap theme readiness check interrupted, retrying", error);
+          setTimeout(attempt, 1_000);
+          return;
+        }
         if (disposed || generation !== loadGeneration || !documentReady || webContents.isDestroyed()) return;
         if (state.ready) {
           await removeStylesheet();
           await applyDocument();
           return;
         }
-        if (remaining > 0) {
-          setTimeout(() => attempt(remaining - 1), 3_000);
-        } else {
-          console.warn("PrettyZap system palette skipped: WhatsApp chat shell was not ready", state);
-        }
+        setTimeout(attempt, 1_000);
       });
     };
-    attempt(5);
+    attempt();
   };
   const scheduleThemeRefresh = (): void => {
     if (refreshTimer) clearTimeout(refreshTimer);

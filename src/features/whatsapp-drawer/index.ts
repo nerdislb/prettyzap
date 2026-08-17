@@ -671,28 +671,30 @@ export function installWhatsAppDrawer(
   const apply = (): void => {
     const generation = ++loadGeneration;
     // Same retry policy as the theme installer: after a fresh login or slow
-    // reconnect the chat shell can appear without a new did-finish-load, so
-    // keep checking instead of skipping once and staying broken until a
-    // manual reload.
-    const attempt = (remaining: number): void => {
+    // reconnect the chat shell can appear minutes after the last page load
+    // and usually without a new did-finish-load, so keep checking instead of
+    // giving up after a fixed budget. Each waitForWhatsAppShell pass is cheap
+    // and short, so this loop costs almost nothing while the QR/login screen
+    // or the boot spinner is showing.
+    const attempt = (): void => {
       void waitForWhatsAppShell(webContents).then((state) => {
         if (disposed || generation !== loadGeneration || webContents.isDestroyed()) return;
         if (!state.ready) {
-          if (remaining > 0) {
-            setTimeout(() => attempt(remaining - 1), 3_000);
-          } else {
-            console.warn("PrettyZap drawer skipped: WhatsApp chat shell was not ready", state);
-          }
+          setTimeout(attempt, 1_000);
           return;
         }
         return webContents.executeJavaScript(createDrawerScript(initialCollapsed)).catch((error: unknown) => {
           console.warn("Unable to install PrettyZap WhatsApp drawer", error);
         });
       }).catch((error: unknown) => {
-        console.warn("Unable to install PrettyZap WhatsApp drawer", error);
+        // A navigation can tear down the JS context mid-wait; that is a
+        // property of the current pass, not the feature.
+        if (disposed || generation !== loadGeneration || webContents.isDestroyed()) return;
+        console.warn("PrettyZap drawer readiness check interrupted, retrying", error);
+        setTimeout(attempt, 1_000);
       });
     };
-    attempt(5);
+    attempt();
   };
 
   webContents.on("did-finish-load", apply);
