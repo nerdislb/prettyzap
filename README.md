@@ -18,7 +18,7 @@ around it.
 Use keyboard shortcuts to search, move through chats, navigate WhatsApp
 sections, open Archived, and focus the composer.
 
-<video src="assets/keyboard-controls.mp4" controls muted loop playsinline width="100%"></video>
+![Keyboard controls demo](assets/keyboard-controls.gif)
 
 [Watch the keyboard controls demo](assets/keyboard-controls.mp4)
 
@@ -27,7 +27,7 @@ sections, open Archived, and focus the composer.
 Switch between WhatsApp's native appearance and the active system palette
 without reloading the conversation or changing its layout.
 
-<video src="assets/theming.mp4" controls muted loop playsinline width="100%"></video>
+![Theming demo](assets/theming.gif)
 
 [Watch the theming demo](assets/theming.mp4)
 
@@ -36,7 +36,7 @@ without reloading the conversation or changing its layout.
 Use the desktop widget to open or hide PrettyZap and access its settings and
 theme controls.
 
-<video src="assets/settings-widget.mp4" controls muted loop playsinline width="100%"></video>
+![Settings and widget demo](assets/settings-widget.gif)
 
 [Watch the settings and widget demo](assets/settings-widget.mp4)
 
