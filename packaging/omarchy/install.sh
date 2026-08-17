@@ -10,7 +10,7 @@ set -euo pipefail
 # user's config is touched. Files are always copied, never symlinked (the
 # plugin validator rejects symlinks).
 #
-#   install.sh [--plugin] [--standalone] [--uninstall] [--section <left|center|right>]
+#   install.sh [--plugin] [--standalone] [--uninstall|--purge] [--section <left|center|right>]
 #
 # From the repo checkout this uses ./plugin and ./standalone.
 
@@ -25,13 +25,16 @@ STANDALONE_DEST="$HOME/.config/quickshell/prettyzap"
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh [--plugin] [--standalone] [--uninstall] [--section <left|center|right>]
+Usage: install.sh [--plugin] [--standalone] [--uninstall|--purge] [--section <left|center|right>]
 
   --plugin       Install and enable the Omarchy bar widget (default when no
                  flags are given).
   --standalone   Install the standalone Quickshell widget to
                  ~/.config/quickshell/prettyzap/ (no Omarchy required).
-  --uninstall    Disable and remove both.
+  --uninstall    Remove PrettyZap, the Omarchy widget, and the standalone
+                 widget while preserving PrettyZap settings and session data.
+  --purge        Same as --uninstall, then delete PrettyZap settings and
+                 WhatsApp Web session data.
   --section      Where the widget sits in the bar: left, center, or right.
                  Without it, install.sh asks interactively (or uses
                  $PZ_BAR_SECTION, or defaults to right when non-interactive).
@@ -49,6 +52,7 @@ while (( $# > 0 )); do
     --plugin) MODE="plugin" ;;
     --standalone) MODE="standalone" ;;
     --uninstall) MODE="uninstall" ;;
+    --purge) MODE="purge" ;;
     --section)
       section_value="${2:-}"
       [[ -n $section_value ]] || { echo "error: --section requires left, center, or right" >&2; exit 1; }
@@ -69,7 +73,7 @@ done
 [[ -n $MODE ]] || MODE="plugin"
 
 if [[ -n $BAR_SECTION && $MODE != plugin ]]; then
-  echo "error: --section only applies to the plugin install (not --standalone or --uninstall)" >&2
+  echo "error: --section only applies to the plugin install (not --standalone, --uninstall, or --purge)" >&2
   exit 1
 fi
 
@@ -162,7 +166,17 @@ install_standalone() {
 }
 
 uninstall_all() {
-  echo "Removing the PrettyZap Omarchy integration..."
+  local purge_data="$1"
+  echo "Removing PrettyZap and its integrations..."
+  pkill -x prettyzap 2>/dev/null || true
+  if pacman -Q prettyzap-bin >/dev/null 2>&1; then
+    if command -v yay >/dev/null 2>&1; then
+      yay -Rns --noconfirm prettyzap-bin
+    else
+      echo "error: yay is required to remove prettyzap-bin." >&2
+      exit 1
+    fi
+  fi
   if shell_ready; then
     omarchy plugin disable "$PLUGIN_ID" 2>&1 || true
   else
@@ -170,11 +184,15 @@ uninstall_all() {
   fi
   rm -rf "$PLUGIN_DEST"
   rm -rf "$STANDALONE_DEST"
+  if [[ $purge_data == true ]]; then
+    rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/prettyzap" "${XDG_CONFIG_HOME:-$HOME/.config}/pjzap"
+  fi
   echo "Removed the plugin and the standalone widget."
 }
 
 case "$MODE" in
   plugin) install_plugin ;;
   standalone) install_standalone ;;
-  uninstall) uninstall_all ;;
+  uninstall) uninstall_all false ;;
+  purge) uninstall_all true ;;
 esac

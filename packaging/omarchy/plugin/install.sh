@@ -5,13 +5,60 @@ set -euo pipefail
 # Omarchy's plugin add command deliberately does not execute repository hooks;
 # the popup's Install PrettyZap button launches this script in a terminal.
 
-if [[ ${1:-} == "--uninstall" ]]; then
-  yay -Rns --noconfirm prettyzap-bin
-  exit 0
-fi
+PLUGIN_ID="prettyletto.prettyzap"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+uninstall() {
+  local purge_data="$1"
+
+  echo "Closing PrettyZap…"
+  pkill -x prettyzap 2>/dev/null || true
+
+  if pacman -Q prettyzap-bin >/dev/null 2>&1; then
+    if ! command -v yay >/dev/null 2>&1; then
+      echo "error: yay is required to remove prettyzap-bin." >&2
+      exit 1
+    fi
+    echo "Removing PrettyZap…"
+    yay -Rns --noconfirm prettyzap-bin
+  else
+    echo "PrettyZap is not installed."
+  fi
+
+  if [[ $purge_data == true ]]; then
+    echo "Removing PrettyZap settings and WhatsApp session data…"
+    rm -rf "$CONFIG_HOME/prettyzap" "$CONFIG_HOME/pjzap"
+  fi
+
+  if command -v omarchy >/dev/null 2>&1; then
+    echo "Removing the Omarchy widget…"
+    omarchy plugin remove "$PLUGIN_ID" --yes
+  else
+    echo "error: Omarchy is required to unregister the $PLUGIN_ID widget." >&2
+    exit 1
+  fi
+}
+
+case "${1:-}" in
+  --uninstall)
+    [[ $# -eq 1 ]] || { echo "usage: $0 [--uninstall|--purge]" >&2; exit 2; }
+    uninstall false
+    exit 0
+    ;;
+  --purge)
+    [[ $# -eq 1 ]] || { echo "usage: $0 [--uninstall|--purge]" >&2; exit 2; }
+    uninstall true
+    exit 0
+    ;;
+  "") ;;
+  *)
+    echo "usage: $0 [--uninstall|--purge]" >&2
+    exit 2
+    ;;
+esac
 
 if [[ $# -gt 0 ]]; then
-  echo "usage: $0 [--uninstall]" >&2
+  echo "usage: $0 [--uninstall|--purge]" >&2
   exit 2
 fi
 
