@@ -36,6 +36,7 @@ BarWidget {
   function handleBarClick(buttonCode) {
     if (buttonCode === Qt.RightButton) root.toggle()
     else if (buttonCode === Qt.MiddleButton) data.openSettings()
+    else if (!data.installed) root.open()
     else data.toggle()
   }
   // Quattro's bar host and keyboard panel dispatch module clicks through this
