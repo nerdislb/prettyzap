@@ -516,6 +516,11 @@ export function installWhatsAppTheme(
   try {
     // The custom palette shares its directory with shell-state.json and
     // status.json, so only react to the palette file itself.
+    // On a completely fresh profile no other writer may have created the
+    // PrettyZap config directory yet. fs.watch() cannot watch a missing
+    // directory, so create the private directory before installing the
+    // watcher instead of leaving first launch without live theme updates.
+    fs.mkdirSync(sources.custom.watchDir, { recursive: true, mode: 0o700 });
     themeWatcher = fs.watch(sources.custom.watchDir, { persistent: false }, (_eventType, filename) => {
       if (typeof filename === "string" && filename !== "colors.toml") return;
       scheduleThemeRefresh();
