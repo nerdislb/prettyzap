@@ -1,0 +1,9 @@
+{
+  "id": "prettyzap",
+  "name": "PrettyZap",
+  "description": "WhatsApp Web in PrettyZap direkt aus der nbshell steuern",
+  "category": "Plugin",
+  "version": "0.1.0",
+  "author": "PrettyZap / nerdislb",
+  "entry": "BarWidget.qml"
+}

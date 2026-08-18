@@ -50,6 +50,8 @@ theme controls.
 - A quick show/hide command for desktop keybindings and launchers.
 - An optional Omarchy bar widget with controls for opening, hiding, theming,
   and quitting PrettyZap.
+- A native nbshell integration in [`packaging/nbshell`](packaging/nbshell/README.md)
+  in the `nerdislb/prettyzap` fork.
 - Local shell preferences for window size, maximized state, and drawer state.
 
 ## Install
